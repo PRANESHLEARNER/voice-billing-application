@@ -177,10 +177,10 @@ export function ShiftHistory() {
                             <div
                               className={`font-medium ${
                                 Math.abs(cashDifference) < 0.01
-                                  ? "text-green-600"
+                                  ? "text-green-600 dark:text-green-400"
                                   : cashDifference < 0
-                                    ? "text-red-600"
-                                    : "text-blue-600"
+                                    ? "text-red-600 dark:text-red-400"
+                                    : "text-blue-600 dark:text-blue-400"
                               }`}
                             >
                               {Math.abs(cashDifference) < 0.01

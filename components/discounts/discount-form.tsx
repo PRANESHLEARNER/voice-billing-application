@@ -431,7 +431,7 @@ export function DiscountForm({ discount, onSuccess, onCancel }: DiscountFormProp
       </Card>
 
       {/* Actions */}
-      <div className="flex flex-col sm:flex-row justify-end gap-4 p-4 bg-white rounded-lg border">
+      <div className="flex flex-col sm:flex-row justify-end gap-4 p-4 bg-background rounded-lg border">
         <Button type="button" variant="outline" onClick={onCancel} className="w-full sm:w-auto">
           Cancel
         </Button>

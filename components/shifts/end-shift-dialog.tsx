@@ -107,7 +107,7 @@ export function EndShiftDialog({ isOpen, onClose, onEndShift, currentShift }: En
               </div>
               <div className="flex justify-between">
                 <span>Total Sales:</span>
-                <span className="text-green-600">{formatCurrency(currentShift.totalSales)}</span>
+                <span className="text-green-600 dark:text-green-400">{formatCurrency(currentShift.totalSales)}</span>
               </div>
               <div className="flex justify-between">
                 <span>Bills Created:</span>
@@ -144,7 +144,7 @@ export function EndShiftDialog({ isOpen, onClose, onEndShift, currentShift }: En
               <AlertDescription>
                 <div className="flex justify-between items-center">
                   <span>Cash Difference:</span>
-                  <span className={`font-medium ${difference < 0 ? "text-red-600" : "text-green-600"}`}>
+                  <span className={`font-medium ${difference < 0 ? "text-red-600 dark:text-red-400" : "text-green-600 dark:text-green-400"}`}>
                     {difference > 0 ? "+" : ""}
                     {formatCurrency(difference)}
                   </span>

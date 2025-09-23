@@ -124,3 +124,41 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Fullscreen mode styles */
+@layer utilities {
+  .fullscreen-mode header {
+    display: none !important;
+  }
+  
+  .fullscreen-mode nav {
+    display: none !important;
+  }
+  
+  .fullscreen-mode .flex > nav:first-child {
+    display: none !important;
+  }
+  
+  .fullscreen-mode .flex > header {
+    display: none !important;
+  }
+  
+  /* Ensure main content takes full viewport in fullscreen */
+  .fullscreen-mode main {
+    width: 100vw !important;
+    height: 100vh !important;
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  /* Hide any padding/margin on body in fullscreen */
+  .fullscreen-mode {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+  
+  .fullscreen-mode > div {
+    margin: 0 !important;
+    padding: 0 !important;
+  }
+}

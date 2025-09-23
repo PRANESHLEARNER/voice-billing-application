@@ -23,7 +23,7 @@ export function EmployeeForm({ employee, onSuccess, onCancel }: EmployeeFormProp
     // User details
     email: employee?.user.email || "",
     password: "",
-    role: employee?.user.role || "cashier",
+    role: "cashier", // Hardcoded to cashier only
     employeeId: employee?.user.employeeId || "",
     
     // Personal details
@@ -47,14 +47,10 @@ export function EmployeeForm({ employee, onSuccess, onCancel }: EmployeeFormProp
     panNumber: employee?.identification.panNumber || "",
     
     // Employment details
-    department: employee?.employmentDetails.department || "",
-    position: employee?.employmentDetails.position || "",
+    department: "cashier", // Hardcoded to cashier only
+    position: employee?.employmentDetails.position || "Cashier",
     dateOfJoining: employee?.employmentDetails.dateOfJoining ? new Date(employee.employmentDetails.dateOfJoining).toISOString().split('T')[0] : "",
     salary: employee?.employmentDetails.salary || 0,
-    accountNumber: employee?.employmentDetails.bankAccount?.accountNumber || "",
-    bankName: employee?.employmentDetails.bankAccount?.bankName || "",
-    ifscCode: employee?.employmentDetails.bankAccount?.ifscCode || "",
-    branchName: employee?.employmentDetails.bankAccount?.branchName || "",
     
     status: employee?.status || "active"
   })
@@ -125,13 +121,7 @@ export function EmployeeForm({ employee, onSuccess, onCancel }: EmployeeFormProp
         department: formData.department,
         position: formData.position,
         dateOfJoining: formData.dateOfJoining,
-        salary: Number(formData.salary),
-        bankAccount: {
-          accountNumber: formData.accountNumber,
-          bankName: formData.bankName,
-          ifscCode: formData.ifscCode,
-          branchName: formData.branchName
-        }
+        salary: formData.salary || 0 // Default salary for cashiers
       }))
 
       // Append files
@@ -221,18 +211,6 @@ export function EmployeeForm({ employee, onSuccess, onCancel }: EmployeeFormProp
                 onChange={(e) => handleInputChange('employeeId', e.target.value)}
                 required
               />
-            </div>
-            <div>
-              <Label htmlFor="role">Role</Label>
-              <Select value={formData.role} onValueChange={(value) => handleInputChange('role', value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="admin">Admin</SelectItem>
-                  <SelectItem value="cashier">Cashier</SelectItem>
-                </SelectContent>
-              </Select>
             </div>
           </CardContent>
         </Card>
@@ -456,25 +434,12 @@ export function EmployeeForm({ employee, onSuccess, onCancel }: EmployeeFormProp
           </CardHeader>
           <CardContent className="space-y-4">
             <div>
-              <Label htmlFor="department">Department</Label>
-              <Select value={formData.department} onValueChange={(value) => handleInputChange('department', value)}>
-                <SelectTrigger>
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="cashier">Cashier</SelectItem>
-                  <SelectItem value="manager">Manager</SelectItem>
-                  <SelectItem value="supervisor">Supervisor</SelectItem>
-                  <SelectItem value="stock">Stock</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-            <div>
               <Label htmlFor="position">Position</Label>
               <Input
                 id="position"
                 value={formData.position}
                 onChange={(e) => handleInputChange('position', e.target.value)}
+                placeholder="e.g., Senior Cashier, Junior Cashier"
                 required
               />
             </div>
@@ -488,48 +453,6 @@ export function EmployeeForm({ employee, onSuccess, onCancel }: EmployeeFormProp
                 required
               />
             </div>
-            <div>
-              <Label htmlFor="salary">Salary</Label>
-              <Input
-                id="salary"
-                type="number"
-                value={formData.salary}
-                onChange={(e) => handleInputChange('salary', Number(e.target.value))}
-                required
-              />
-            </div>
-            <div>
-              <Label htmlFor="accountNumber">Bank Account Number</Label>
-              <Input
-                id="accountNumber"
-                value={formData.accountNumber}
-                onChange={(e) => handleInputChange('accountNumber', e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="bankName">Bank Name</Label>
-              <Input
-                id="bankName"
-                value={formData.bankName}
-                onChange={(e) => handleInputChange('bankName', e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="ifscCode">IFSC Code</Label>
-              <Input
-                id="ifscCode"
-                value={formData.ifscCode}
-                onChange={(e) => handleInputChange('ifscCode', e.target.value)}
-              />
-            </div>
-            <div>
-              <Label htmlFor="branchName">Branch Name</Label>
-              <Input
-                id="branchName"
-                value={formData.branchName}
-                onChange={(e) => handleInputChange('branchName', e.target.value)}
-              />
-            </div>
           </CardContent>
         </Card>
       </div>
@@ -539,7 +462,7 @@ export function EmployeeForm({ employee, onSuccess, onCancel }: EmployeeFormProp
           Cancel
         </Button>
         <Button type="submit" disabled={loading}>
-          {loading ? "Saving..." : (employee ? "Update Employee" : "Create Employee")}
+          {loading ? "Saving..." : (employee ? "Update Cashier" : "Create Cashier")}
         </Button>
       </div>
     </form>

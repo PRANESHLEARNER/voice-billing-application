@@ -14,7 +14,7 @@ const router = express.Router();
  */
 router.post("/", auth, async (req, res) => {
   try {
-    const { items, customer, cashTendered = 0, paymentMethod } = req.body;
+    const { items, customer, cashTendered = 0, paymentMethod, paymentDetails, paymentBreakdown } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "No items provided for the bill." });
@@ -39,23 +39,23 @@ router.post("/", auth, async (req, res) => {
 
         // Handle variant selection
         let selectedVariant = null;
-        let variantSize = "Default";
+        let variantSize = item.size || "Default";
         let variantPrice = Number(item.rate);
         
-        if (item.variant && product.variants && product.variants.length > 0) {
-          selectedVariant = product.variants.find(v => v.sku === item.variant);
+        if (item.size && product.variants && product.variants.length > 0) {
+          selectedVariant = product.variants.find(v => v.size === item.size);
           if (!selectedVariant) {
-            throw new Error(`Variant not found: ${item.variant} for product: ${product.name}`);
+            throw new Error(`Variant not found: ${item.size} for product: ${product.name}`);
           }
           
           // Check if variant is active
           if (!selectedVariant.isActive) {
-            throw new Error(`Variant ${item.variant} is not active for product: ${product.name}`);
+            throw new Error(`Variant ${item.size} is not active for product: ${product.name}`);
           }
           
           // Check stock
           if (selectedVariant.stock < item.quantity) {
-            throw new Error(`Insufficient stock for variant ${item.variant}. Available: ${selectedVariant.stock}, Required: ${item.quantity}`);
+            throw new Error(`Insufficient stock for variant ${item.size}. Available: ${selectedVariant.stock}, Required: ${item.quantity}`);
           }
           
           variantSize = selectedVariant.size;
@@ -67,29 +67,46 @@ router.post("/", auth, async (req, res) => {
           }
         }
 
-        // Find the best applicable discount for this product
-        const bestDiscount = await Discount.findBestDiscountForProduct(
-          product._id,
-          item.quantity
-        );
-
+        // Use discount information from frontend if provided, otherwise find best applicable discount
         const amount = Number(item.quantity) * variantPrice;
         let discountAmount = 0;
         let discountInfo = null;
-
-        if (bestDiscount) {
-          discountAmount = bestDiscount.discountAmount;
+        
+        if (item.discount && item.discount.discountId) {
+          // Use the discount information sent from frontend
+          discountAmount = item.discount.discountAmount || 0;
           discountInfo = {
-            discountId: bestDiscount.discount._id,
-            discountName: bestDiscount.discount.name,
-            discountType: bestDiscount.discount.type,
-            discountValue: bestDiscount.discount.value,
-            discountAmount: bestDiscount.discountAmount
+            discountId: item.discount.discountId,
+            discountName: item.discount.discountName,
+            discountType: item.discount.discountType,
+            discountValue: item.discount.discountValue,
+            discountAmount: discountAmount
           };
-
+          
           // Track discount usage
-          const discountId = bestDiscount.discount._id.toString();
+          const discountId = item.discount.discountId.toString();
           discountUsageMap.set(discountId, (discountUsageMap.get(discountId) || 0) + 1);
+        } else {
+          // Fallback: Find the best applicable discount for this product
+          const bestDiscount = await Discount.findBestDiscountForProduct(
+            product._id,
+            item.quantity
+          );
+          
+          if (bestDiscount) {
+            discountAmount = bestDiscount.discountAmount;
+            discountInfo = {
+              discountId: bestDiscount.discount._id,
+              discountName: bestDiscount.discount.name,
+              discountType: bestDiscount.discount.type,
+              discountValue: bestDiscount.discount.value,
+              discountAmount: bestDiscount.discountAmount
+            };
+            
+            // Track discount usage
+            const discountId = bestDiscount.discount._id.toString();
+            discountUsageMap.set(discountId, (discountUsageMap.get(discountId) || 0) + 1);
+          }
         }
 
         const discountedAmount = amount - discountAmount;
@@ -105,7 +122,7 @@ router.post("/", auth, async (req, res) => {
           productCode: product.code,
           productName: product.name,
           variantSize: variantSize,
-          variantSku: item.variant || null,
+          variantSku: selectedVariant ? selectedVariant.sku : null,
           amount: discountedAmount,
           taxAmount,
           totalAmount,
@@ -141,6 +158,8 @@ router.post("/", auth, async (req, res) => {
       cashTendered,
       changeDue,
       paymentMethod,
+      paymentDetails,
+      paymentBreakdown,
       cashier: req.user._id,
       cashierName: req.user.name,
       shift: activeShift?._id,
@@ -184,7 +203,17 @@ router.post("/", auth, async (req, res) => {
     }
 
     await bill.populate("items.product");
-    res.status(201).json(bill);
+    
+    // Transform the bill items to map variantSize to size for frontend compatibility
+    const transformedBill = {
+      ...bill.toObject(),
+      items: bill.items.map(item => ({
+        ...item.toObject(),
+        size: item.variantSize  // Map variantSize to size for frontend
+      }))
+    };
+    
+    res.status(201).json(transformedBill);
   } catch (error) {
     console.error("Error creating bill:", error);
     res.status(500).json({
@@ -222,14 +251,24 @@ router.get("/", auth, async (req, res) => {
 
     const bills = await Bill.find(query)
       .populate("cashier", "name employeeId")
+      .populate("items.product")
       .sort({ createdAt: -1 })
       .limit(Number(limit))
       .skip((Number(page) - 1) * Number(limit));
 
     const total = await Bill.countDocuments(query);
+    
+    // Transform the bills to map variantSize to size for frontend compatibility
+    const transformedBills = bills.map(bill => ({
+      ...bill.toObject(),
+      items: bill.items.map(item => ({
+        ...item.toObject(),
+        size: item.variantSize  // Map variantSize to size for frontend
+      }))
+    }));
 
     res.json({
-      bills,
+      bills: transformedBills,
       totalPages: Math.ceil(total / limit),
       currentPage: Number(page),
       total,
@@ -254,11 +293,44 @@ router.get("/:id", auth, async (req, res) => {
       return res.status(404).json({ message: "Bill not found" });
     }
 
-    res.json(bill);
+    // Transform the bill to map variantSize to size for frontend compatibility
+    const transformedBill = {
+      ...bill.toObject(),
+      items: bill.items.map(item => ({
+        ...item.toObject(),
+        size: item.variantSize  // Map variantSize to size for frontend
+      }))
+    };
+
+    res.json(transformedBill);
   } catch (error) {
     console.error("Error fetching bill:", error);
     res.status(500).json({ message: "Failed to fetch bill", error: error.message });
   }
+
 });
+
+
+/**
+ * DELETE /api/bills/:id
+ * Delete a single bill by ID
+ */
+router.delete("/:id", auth, async (req, res) => {
+  try {
+    const bill = await Bill.findById(req.params.id);
+    
+    if (!bill) {
+      return res.status(404).json({ message: "Bill not found" });
+    }
+
+    await Bill.findByIdAndDelete(req.params.id);
+    
+    res.json({ message: "Bill deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting bill:", error);
+    res.status(500).json({ message: "Failed to delete bill", error: error.message });
+  }
+});
+
 
 module.exports = router;

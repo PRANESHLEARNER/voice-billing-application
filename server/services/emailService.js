@@ -20,10 +20,34 @@ const sendLowStockNotification = async (products) => {
       const urgencyLevel = product.stock <= 3 ? 'Critical' : product.stock <= 6 ? 'High' : 'Medium';
       const urgencyColor = product.stock <= 3 ? '#dc3545' : product.stock <= 6 ? '#fd7e14' : '#ffc107';
       
+      const displayName = product.type === 'variant' ? `${product.name} (${product.size})` : product.name;
+      const displayCode = product.type === 'variant' ? product.code : product.code;
+      
+      // Generate variants information
+      let variantsHtml = '';
+      if (product.variants && product.variants.length > 0) {
+        variantsHtml = `
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
+            <div style="font-size: 12px; font-weight: 600; color: #6b7280; margin-bottom: 8px;">All Variants:</div>
+            ${product.variants.map(variant => {
+              const variantStatus = variant.stock === 0 ? '🚨' : variant.stock < 10 ? '⚠️' : '✅';
+              const variantColor = variant.stock === 0 ? '#dc3545' : variant.stock < 10 ? '#fd7e14' : '#10b981';
+              return `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 11px;">
+                  <span style="color: #6b7280;">${variant.size}g</span>
+                  <span style="font-family: monospace; background-color: #f8f9fa; padding: 2px 6px; border-radius: 4px;">${variant.sku}</span>
+                  <span style="color: ${variantColor}; font-weight: bold;">${variantStatus} ${variant.stock}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+      
       return `
         <tr style="border-bottom: 1px solid #dee2e6;">
-          <td style="padding: 12px; border-right: 1px solid #dee2e6; font-weight: 600;">${product.name}</td>
-          <td style="padding: 12px; border-right: 1px solid #dee2e6; font-family: monospace; background-color: #f8f9fa;">${product.code}</td>
+          <td style="padding: 12px; border-right: 1px solid #dee2e6; font-weight: 600;">${displayName}${variantsHtml}</td>
+          <td style="padding: 12px; border-right: 1px solid #dee2e6; font-family: monospace; background-color: #f8f9fa;">${displayCode}</td>
           <td style="padding: 12px; border-right: 1px solid #dee2e6; text-align: center;">
             <span style="background-color: ${urgencyColor}; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold;">${product.stock}</span>
           </td>
@@ -139,12 +163,36 @@ const sendOutOfStockNotification = async (products) => {
       const urgencyLevel = daysSinceStockout >= 7 ? 'URGENT' : daysSinceStockout >= 3 ? 'HIGH' : 'MEDIUM';
       const urgencyColor = daysSinceStockout >= 7 ? '#721c24' : daysSinceStockout >= 3 ? '#dc3545' : '#fd7e14';
       
+      const displayName = product.type === 'variant' ? `${product.name} (${product.size})` : product.name;
+      const displayCode = product.type === 'variant' ? product.code : product.code;
+      
+      // Generate variants information
+      let variantsHtml = '';
+      if (product.variants && product.variants.length > 0) {
+        variantsHtml = `
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
+            <div style="font-size: 12px; font-weight: 600; color: #6b7280; margin-bottom: 8px;">All Variants:</div>
+            ${product.variants.map(variant => {
+              const variantStatus = variant.stock === 0 ? '🚨' : variant.stock < 10 ? '⚠️' : '✅';
+              const variantColor = variant.stock === 0 ? '#dc3545' : variant.stock < 10 ? '#fd7e14' : '#10b981';
+              return `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 11px;">
+                  <span style="color: #6b7280;">${variant.size}g</span>
+                  <span style="font-family: monospace; background-color: #f8f9fa; padding: 2px 6px; border-radius: 4px;">${variant.sku}</span>
+                  <span style="color: ${variantColor}; font-weight: bold;">${variantStatus} ${variant.stock}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+      
       return `
         <tr style="border-bottom: 1px solid #dee2e6;">
-          <td style="padding: 12px; border-right: 1px solid #dee2e6; font-weight: 600;">${product.name}</td>
-          <td style="padding: 12px; border-right: 1px solid #dee2e6; font-family: monospace; background-color: #f8f9fa;">${product.code}</td>
+          <td style="padding: 12px; border-right: 1px solid #dee2e6; font-weight: 600;">${displayName}${variantsHtml}</td>
+          <td style="padding: 12px; border-right: 1px solid #dee2e6; font-family: monospace; background-color: #f8f9fa;">${displayCode}</td>
           <td style="padding: 12px; border-right: 1px solid #dee2e6; text-align: center;">
-            <span style="background-color: #dc3545; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold;">0</span>
+            <span style="background-color: #dc3545; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold;">${product.stock}</span>
           </td>
           <td style="padding: 12px; border-right: 1px solid #dee2e6; text-align: center; font-size: 12px;">
             ${daysSinceStockout > 0 ? `${daysSinceStockout}d` : 'Today'}
@@ -239,65 +287,392 @@ const testEmailConfiguration = async () => {
     const mailOptions = {
       from: process.env.EMAIL_USER,
       to: process.env.NOTIFICATION_EMAIL,
-      subject: '✅ Email Configuration Test - Supermarket Billing System',
+      subject: '✅ Test Email - Supermarket Billing System',
       html: `
         <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
           <!-- Header -->
-          <div style="background-color: #f0fdf4; padding: 32px 24px; text-align: center; border-bottom: 1px solid #e5e7eb;">
+          <div style="background-color: #f0f9ff; padding: 32px 24px; text-align: center; border-bottom: 1px solid #e5e7eb;">
             <div style="font-size: 32px; margin-bottom: 12px;">✅</div>
-            <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #166534;">Email Configuration Test</h1>
-            <p style="margin: 8px 0 0 0; font-size: 14px; color: #15803d;">System Verification</p>
+            <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #0369a1;">Test Email</h1>
+            <p style="margin: 8px 0 0 0; font-size: 14px; color: #075985;">Supermarket Billing System</p>
           </div>
           
-          <!-- Success Message -->
-          <div style="padding: 24px; text-align: center;">
-            <div style="background-color: #dcfce7; border: 1px solid #bbf7d0; padding: 20px; border-radius: 8px; margin-bottom: 24px;">
-              <div style="font-size: 20px; margin-bottom: 8px; color: #166534;">✓</div>
-              <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600; color: #166534;">Configuration Successful</h3>
-              <p style="margin: 0; font-size: 14px; color: #15803d; line-height: 1.5;">Email notification system is properly configured and ready to send stock alerts.</p>
+          <!-- Content -->
+          <div style="padding: 24px;">
+            <p style="margin: 0 0 16px 0; font-size: 16px; line-height: 1.5; color: #374151;">Hello,</p>
+            <p style="margin: 0 0 16px 0; font-size: 16px; line-height: 1.5; color: #374151;">This is a test email to verify that the email configuration is working correctly for the Supermarket Billing System.</p>
+            <div style="background-color: #f0f9ff; padding: 16px; border-radius: 6px; border-left: 4px solid #0ea5e9;">
+              <p style="margin: 0; font-size: 14px; color: #075985; font-weight: 600;">✅ Email configuration is working properly!</p>
+              <p style="margin: 8px 0 0 0; font-size: 12px; color: #64748b;">Sent at: ${new Date().toLocaleString()}</p>
             </div>
-            
-            <div style="background-color: #f9fafb; border: 1px solid #e5e7eb; padding: 20px; border-radius: 8px;">
-              <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; text-align: center;">
-                <div>
-                  <div style="font-size: 20px; margin-bottom: 8px; color: #374151;">📧</div>
-                  <div style="font-size: 14px; font-weight: 600; color: #374151;">SMTP Server</div>
-                  <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">Connected</div>
-                </div>
-                <div>
-                  <div style="font-size: 20px; margin-bottom: 8px; color: #374151;">🔔</div>
-                  <div style="font-size: 14px; font-weight: 600; color: #374151;">Notifications</div>
-                  <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">Ready</div>
-                </div>
-              </div>
-            </div>
+            <p style="margin: 16px 0 0 0; font-size: 14px; color: #6b7280;">You will receive stock notifications when products are low or out of stock.</p>
           </div>
           
           <!-- Footer -->
-          <div style="padding: 24px; background-color: #f9fafb; border-top: 1px solid #e5e7eb; text-align: center;">
-            <div style="font-size: 12px; color: #6b7280; margin-bottom: 8px;">
-              Test completed on ${new Date().toLocaleDateString('en-US', { 
-                year: 'numeric', 
-                month: 'short', 
-                day: 'numeric'
-              })} at ${new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })}
-            </div>
-            <div style="font-size: 14px; font-weight: 500; color: #374151;">
-              Supermarket Billing System
-            </div>
-            <div style="font-size: 12px; color: #9ca3af; margin-top: 4px;">
-              Email Notification System
-            </div>
+          <div style="padding: 16px 24px; background-color: #f9fafb; border-top: 1px solid #e5e7eb; text-align: center;">
+            <p style="margin: 0; font-size: 12px; color: #6b7280;">Supermarket Billing System - Automated Notification</p>
           </div>
         </div>
       `
     };
-
+    
     const result = await transporter.sendMail(mailOptions);
-    console.log('Test email sent successfully:', result.messageId);
+    console.log('✅ Test email sent successfully:', result.messageId);
     return result;
   } catch (error) {
-    console.error('Error testing email configuration:', error);
+    console.error('❌ Error sending test email:', error);
+    throw error;
+  }
+};
+
+// Send end-of-day stock summary email
+const sendEndOfDayStockSummary = async (lowStockProducts, outOfStockProducts) => {
+  try {
+    const transporter = createTransporter();
+    
+    // Generate low stock product details
+    const lowStockDetails = lowStockProducts.map(product => {
+      const urgencyLevel = product.stock <= 3 ? 'Critical' : product.stock <= 6 ? 'High' : 'Medium';
+      const urgencyColor = product.stock <= 3 ? '#dc3545' : product.stock <= 6 ? '#fd7e14' : '#ffc107';
+      const displayName = product.type === 'variant' ? `${product.name} (${product.size})` : product.name;
+      const displayCode = product.type === 'variant' ? product.code : product.code;
+      
+      // Generate variants information
+      let variantsHtml = '';
+      if (product.variants && product.variants.length > 0) {
+        variantsHtml = `
+          <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+            <div style="font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 6px;">All Variants:</div>
+            ${product.variants.map(variant => {
+              const variantStatus = variant.stock === 0 ? '🚨' : variant.stock < 10 ? '⚠️' : '✅';
+              const variantColor = variant.stock === 0 ? '#dc3545' : variant.stock < 10 ? '#fd7e14' : '#10b981';
+              return `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 2px 0; font-size: 10px;">
+                  <span style="color: #6b7280;">${variant.size}g</span>
+                  <span style="font-family: monospace; background-color: #f8f9fa; padding: 1px 4px; border-radius: 3px;">${variant.sku}</span>
+                  <span style="color: ${variantColor}; font-weight: bold;">${variantStatus} ${variant.stock}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+      
+      return `
+        <tr style="border-bottom: 1px solid #dee2e6;">
+          <td style="padding: 10px; border-right: 1px solid #dee2e6; font-weight: 600;">${displayName}${variantsHtml}</td>
+          <td style="padding: 10px; border-right: 1px solid #dee2e6; font-family: monospace; background-color: #f8f9fa;">${displayCode}</td>
+          <td style="padding: 10px; border-right: 1px solid #dee2e6; text-align: center;">
+            <span style="background-color: ${urgencyColor}; color: white; padding: 3px 6px; border-radius: 10px; font-size: 11px; font-weight: bold;">${product.stock}</span>
+          </td>
+          <td style="padding: 10px; text-align: center;">
+            <span style="color: ${urgencyColor}; font-weight: bold; font-size: 12px;">${urgencyLevel}</span>
+          </td>
+        </tr>
+      `;
+    }).join('');
+    
+    // Generate out of stock product details
+    const outOfStockDetails = outOfStockProducts.map(product => {
+      const displayName = product.type === 'variant' ? `${product.name} (${product.size})` : product.name;
+      const displayCode = product.type === 'variant' ? product.code : product.code;
+      
+      // Generate variants information
+      let variantsHtml = '';
+      if (product.variants && product.variants.length > 0) {
+        variantsHtml = `
+          <div style="margin-top: 8px; padding-top: 8px; border-top: 1px solid #e5e7eb;">
+            <div style="font-size: 11px; font-weight: 600; color: #6b7280; margin-bottom: 6px;">All Variants:</div>
+            ${product.variants.map(variant => {
+              const variantStatus = variant.stock === 0 ? '🚨' : variant.stock < 10 ? '⚠️' : '✅';
+              const variantColor = variant.stock === 0 ? '#dc3545' : variant.stock < 10 ? '#fd7e14' : '#10b981';
+              return `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 2px 0; font-size: 10px;">
+                  <span style="color: #6b7280;">${variant.size}g</span>
+                  <span style="font-family: monospace; background-color: #f8f9fa; padding: 1px 4px; border-radius: 3px;">${variant.sku}</span>
+                  <span style="color: ${variantColor}; font-weight: bold;">${variantStatus} ${variant.stock}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+      
+      return `
+        <tr style="border-bottom: 1px solid #dee2e6;">
+          <td style="padding: 10px; border-right: 1px solid #dee2e6; font-weight: 600;">${displayName}${variantsHtml}</td>
+          <td style="padding: 10px; border-right: 1px solid #dee2e6; font-family: monospace; background-color: #f8f9fa;">${displayCode}</td>
+          <td style="padding: 10px; border-right: 1px solid #dee2e6; text-align: center;">
+            <span style="background-color: #dc3545; color: white; padding: 3px 6px; border-radius: 10px; font-size: 11px; font-weight: bold;">${product.stock}</span>
+          </td>
+          <td style="padding: 10px; text-align: center;">
+            <span style="color: #dc3545; font-weight: bold; font-size: 12px;">Out of Stock</span>
+          </td>
+        </tr>
+      `;
+    }).join('');
+    
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: process.env.NOTIFICATION_EMAIL,
+      subject: `📊 End of Day Stock Summary - ${lowStockProducts.length + outOfStockProducts.length} Items Need Attention - Supermarket Billing System`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+          <!-- Header -->
+          <div style="background-color: #1f2937; padding: 32px 24px; text-align: center; border-bottom: 1px solid #e5e7eb;">
+            <div style="font-size: 32px; margin-bottom: 12px;">📊</div>
+            <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #ffffff;">End of Day Stock Summary</h1>
+            <p style="margin: 8px 0 0 0; font-size: 14px; color: #d1d5db;">Inventory Management System</p>
+          </div>
+          
+          <!-- Summary Stats -->
+          <div style="padding: 24px; background-color: #f9fafb; border-bottom: 1px solid #e5e7eb;">
+            <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: center;">
+              <div style="background-color: white; padding: 16px; border-radius: 6px; border: 1px solid #e5e7eb;">
+                <div style="font-size: 24px; font-weight: 600; color: #dc2626;">${outOfStockProducts.length}</div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">Out of Stock</div>
+              </div>
+              <div style="background-color: white; padding: 16px; border-radius: 6px; border: 1px solid #e5e7eb;">
+                <div style="font-size: 24px; font-weight: 600; color: #d97706;">${lowStockProducts.length}</div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">Low Stock</div>
+              </div>
+              <div style="background-color: white; padding: 16px; border-radius: 6px; border: 1px solid #e5e7eb;">
+                <div style="font-size: 24px; font-weight: 600; color: #059669;">${new Date().toLocaleDateString()}</div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">Report Date</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Out of Stock Section -->
+          ${outOfStockProducts.length > 0 ? `
+          <div style="padding: 24px; border-bottom: 1px solid #e5e7eb;">
+            <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #dc2626;">🚨 Out of Stock Products</h3>
+            <div style="overflow-x: auto;">
+              <table style="width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;">
+                <thead style="background-color: #fef2f2; border-bottom: 1px solid #e5e7eb;">
+                  <tr>
+                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #991b1b;">Product Name</th>
+                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #991b1b;">Code/SKU</th>
+                    <th style="padding: 12px; text-align: center; font-size: 13px; font-weight: 600; color: #991b1b;">Stock</th>
+                    <th style="padding: 12px; text-align: center; font-size: 13px; font-weight: 600; color: #991b1b;">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${outOfStockDetails}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          ` : ''}
+          
+          <!-- Low Stock Section -->
+          ${lowStockProducts.length > 0 ? `
+          <div style="padding: 24px; border-bottom: 1px solid #e5e7eb;">
+            <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #d97706;">⚠️ Low Stock Products</h3>
+            <div style="overflow-x: auto;">
+              <table style="width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;">
+                <thead style="background-color: #fffbeb; border-bottom: 1px solid #e5e7eb;">
+                  <tr>
+                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #92400e;">Product Name</th>
+                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #92400e;">Code/SKU</th>
+                    <th style="padding: 12px; text-align: center; font-size: 13px; font-weight: 600; color: #92400e;">Stock</th>
+                    <th style="padding: 12px; text-align: center; font-size: 13px; font-weight: 600; color: #92400e;">Priority</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${lowStockDetails}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          ` : ''}
+          
+          <!-- No Issues Message -->
+          ${outOfStockProducts.length === 0 && lowStockProducts.length === 0 ? `
+          <div style="padding: 24px; text-align: center;">
+            <div style="font-size: 48px; margin-bottom: 16px;">✅</div>
+            <h3 style="margin: 0 0 8px 0; font-size: 18px; font-weight: 600; color: #059669;">All Products Have Sufficient Stock</h3>
+            <p style="margin: 0; font-size: 14px; color: #6b7280;">No stock issues reported today. Great job managing inventory!</p>
+          </div>
+          ` : ''}
+          
+          <!-- Action Items -->
+          ${(outOfStockProducts.length > 0 || lowStockProducts.length > 0) ? `
+          <div style="padding: 24px; background-color: #f0f9ff; border-bottom: 1px solid #e5e7eb;">
+            <h3 style="margin: 0 0 12px 0; font-size: 16px; font-weight: 600; color: #0369a1;">📋 Action Items</h3>
+            <ul style="margin: 0; padding-left: 20px; font-size: 14px; color: #374151; line-height: 1.5;">
+              ${outOfStockProducts.length > 0 ? '<li style="margin-bottom: 8px;">🚨 <strong>Urgent:</strong> Restock out of stock items immediately</li>' : ''}
+              ${lowStockProducts.length > 0 ? '<li style="margin-bottom: 8px;">⚠️ <strong>Priority:</strong> Order more inventory for low stock items</li>' : ''}
+              <li style="margin-bottom: 8px;">📊 <strong>Review:</strong> Update stock thresholds if needed</li>
+              <li style="margin-bottom: 8px;">📧 <strong>Monitor:</strong> Check for new notifications tomorrow</li>
+            </ul>
+          </div>
+          ` : ''}
+          
+          <!-- Footer -->
+          <div style="padding: 16px 24px; background-color: #f9fafb; border-top: 1px solid #e5e7eb; text-align: center;">
+            <p style="margin: 0; font-size: 12px; color: #6b7280;">Supermarket Billing System - End of Day Stock Summary</p>
+            <p style="margin: 4px 0 0 0; font-size: 11px; color: #9ca3af;">Generated at ${new Date().toLocaleString()}</p>
+          </div>
+        </div>
+      `
+    };
+    
+    const result = await transporter.sendMail(mailOptions);
+    console.log('✅ End of day stock summary sent successfully:', result.messageId);
+    return result;
+  } catch (error) {
+    console.error('❌ Error sending end of day stock summary:', error);
+    throw error;
+  }
+};
+
+// Send restock notification
+const sendRestockNotification = async (products) => {
+  try {
+    const transporter = createTransporter();
+    
+    const productDetails = products.map(product => {
+      const displayName = product.type === 'variant' ? `${product.name} (${product.size})` : product.name;
+      const displayCode = product.type === 'variant' ? product.code : product.code;
+      
+      // Generate variants information
+      let variantsHtml = '';
+      if (product.variants && product.variants.length > 0) {
+        variantsHtml = `
+          <div style="margin-top: 12px; padding-top: 12px; border-top: 1px solid #e5e7eb;">
+            <div style="font-size: 12px; font-weight: 600; color: #6b7280; margin-bottom: 8px;">All Variants:</div>
+            ${product.variants.map(variant => {
+              const variantStatus = variant.stock === 0 ? '🚨' : variant.stock < 10 ? '⚠️' : '✅';
+              const variantColor = variant.stock === 0 ? '#dc3545' : variant.stock < 10 ? '#fd7e14' : '#10b981';
+              return `
+                <div style="display: flex; justify-content: space-between; align-items: center; padding: 4px 0; font-size: 11px;">
+                  <span style="color: #6b7280;">${variant.size}g</span>
+                  <span style="font-family: monospace; background-color: #f8f9fa; padding: 2px 6px; border-radius: 4px;">${variant.sku}</span>
+                  <span style="color: ${variantColor}; font-weight: bold;">${variantStatus} ${variant.stock}</span>
+                </div>
+              `;
+            }).join('')}
+          </div>
+        `;
+      }
+      
+      return `
+        <tr style="border-bottom: 1px solid #dee2e6;">
+          <td style="padding: 12px; border-right: 1px solid #dee2e6; font-weight: 600;">${displayName}${variantsHtml}</td>
+          <td style="padding: 12px; border-right: 1px solid #dee2e6; font-family: monospace; background-color: #f8f9fa;">${displayCode}</td>
+          <td style="padding: 12px; border-right: 1px solid #dee2e6; text-align: center;">
+            <span style="background-color: #10b981; color: white; padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold;">${product.stock}</span>
+          </td>
+          <td style="padding: 12px; text-align: center;">
+            <span style="color: #10b981; font-weight: bold; font-size: 12px;">✅ Restocked</span>
+          </td>
+        </tr>
+      `;
+    }).join('');
+    
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: process.env.NOTIFICATION_EMAIL,
+      subject: `✅ Products Restocked - ${products.length} Items Back in Stock - Supermarket Billing System`,
+      html: `
+        <div style="font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; max-width: 600px; margin: 0 auto; background-color: #ffffff; border: 1px solid #e5e7eb; border-radius: 8px; overflow: hidden;">
+          <!-- Header -->
+          <div style="background-color: #10b981; padding: 32px 24px; text-align: center; border-bottom: 1px solid #e5e7eb;">
+            <div style="font-size: 32px; margin-bottom: 12px;">✅</div>
+            <h1 style="margin: 0; font-size: 24px; font-weight: 600; color: #ffffff;">Products Restocked</h1>
+            <p style="margin: 8px 0 0 0; font-size: 14px; color: #f0fdf4;">Inventory Management System</p>
+          </div>
+          
+          <!-- Summary Stats -->
+          <div style="padding: 24px; background-color: #f0fdf4; border-bottom: 1px solid #e5e7eb;">
+            <div style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; text-align: center;">
+              <div style="background-color: white; padding: 16px; border-radius: 6px; border: 1px solid #e5e7eb;">
+                <div style="font-size: 24px; font-weight: 600; color: #10b981;">${products.length}</div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">Products Restocked</div>
+              </div>
+              <div style="background-color: white; padding: 16px; border-radius: 6px; border: 1px solid #e5e7eb;">
+                <div style="font-size: 24px; font-weight: 600; color: #059669;">${new Date().toLocaleDateString()}</div>
+                <div style="font-size: 12px; color: #6b7280; margin-top: 4px;">Restock Date</div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- Restocked Products Table -->
+          <div style="padding: 24px;">
+            <h3 style="margin: 0 0 16px 0; font-size: 16px; font-weight: 600; color: #059669;">✅ Successfully Restocked Products</h3>
+            <div style="overflow-x: auto;">
+              <table style="width: 100%; border-collapse: collapse; border: 1px solid #e5e7eb; border-radius: 6px; overflow: hidden;">
+                <thead style="background-color: #f0fdf4; border-bottom: 1px solid #e5e7eb;">
+                  <tr>
+                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #059669;">Product Name</th>
+                    <th style="padding: 12px; text-align: left; font-size: 13px; font-weight: 600; color: #059669;">Code/SKU</th>
+                    <th style="padding: 12px; text-align: center; font-size: 13px; font-weight: 600; color: #059669;">Stock</th>
+                    <th style="padding: 12px; text-align: center; font-size: 13px; font-weight: 600; color: #059669;">Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${productDetails}
+                </tbody>
+              </table>
+            </div>
+          </div>
+          
+          <!-- Success Message -->
+          <div style="padding: 24px; background-color: #f0fdf4; border-top: 1px solid #e5e7eb; text-align: center;">
+            <div style="background-color: #10b981; color: white; padding: 16px; border-radius: 6px;">
+              <h3 style="margin: 0 0 8px 0; font-size: 16px; font-weight: 600;">🎉 Great Job!</h3>
+              <p style="margin: 0; font-size: 14px;">${products.length} product${products.length > 1 ? 's have' : ' has'} been successfully restocked and are now available for customers.</p>
+            </div>
+          </div>
+          
+          <!-- Footer -->
+          <div style="padding: 16px 24px; background-color: #f9fafb; border-top: 1px solid #e5e7eb; text-align: center;">
+            <p style="margin: 0; font-size: 12px; color: #6b7280;">Supermarket Billing System - Automated Restock Notification</p>
+          </div>
+        </div>
+      `
+    };
+    
+    const result = await transporter.sendMail(mailOptions);
+    console.log('✅ Restock notification sent successfully:', result.messageId);
+    return result;
+  } catch (error) {
+    console.error('❌ Error sending restock notification:', error);
+    throw error;
+  }
+};
+
+// Send low stock notification with both email and WhatsApp
+const sendLowStockNotificationWithWhatsApp = async (products) => {
+  try {
+    console.log('📧📱 Sending low stock notification via Email and WhatsApp...');
+    
+    // Send email notification
+    await sendLowStockNotification(products);
+    
+    // Send WhatsApp notification
+    console.log('✅ Low stock notification sent successfully via Email');
+    
+  } catch (error) {
+    console.error('❌ Error sending low stock notification with WhatsApp:', error);
+    throw error;
+  }
+};
+
+// Send out of stock notification with both email and WhatsApp
+const sendOutOfStockNotificationWithWhatsApp = async (products) => {
+  try {
+    console.log('📧📱 Sending out of stock notification via Email and WhatsApp...');
+    
+    // Send email notification
+    await sendOutOfStockNotification(products);
+    
+    // Send WhatsApp notification
+    console.log('✅ Out of stock notification sent successfully via Email');
+    
+  } catch (error) {
+    console.error('❌ Error sending out of stock notification with WhatsApp:', error);
     throw error;
   }
 };
@@ -305,5 +680,9 @@ const testEmailConfiguration = async () => {
 module.exports = {
   sendLowStockNotification,
   sendOutOfStockNotification,
-  testEmailConfiguration
+  sendRestockNotification,
+  testEmailConfiguration,
+  sendEndOfDayStockSummary,
+  sendLowStockNotificationWithWhatsApp,
+  sendOutOfStockNotificationWithWhatsApp
 };

@@ -5,26 +5,54 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Alert, AlertDescription } from "@/components/ui/alert"
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import { ShiftStatus } from "./shift-status"
 import { ShiftHistory } from "./shift-history"
 import { apiClient } from "@/lib/api"
 import { useAuth } from "@/hooks/use-auth"
-import { Users, TrendingUp, AlertTriangle, Clock, UserPlus } from "lucide-react"
+import { Users, TrendingUp, AlertTriangle, Clock, DollarSign, Timer, BarChart3, Target } from "lucide-react"
 
 export function ShiftManagement() {
   const { user } = useAuth()
   const [shiftSummary, setShiftSummary] = useState<any>(null)
   const [activeShifts, setActiveShifts] = useState<any[]>([])
   const [availableCashiers, setAvailableCashiers] = useState<any>(null)
-  const [allEmployees, setAllEmployees] = useState<any[]>([])
-  const [selectedAbsentCashier, setSelectedAbsentCashier] = useState<string>("")
-  const [selectedTemporaryCashier, setSelectedTemporaryCashier] = useState<string>("")
-  const [assignmentReason, setAssignmentReason] = useState<string>("")
-  const [isAssigning, setIsAssigning] = useState(false)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState("")
+  const [forceEndShiftDialog, setForceEndShiftDialog] = useState({
+    isOpen: false,
+    shiftId: "",
+    shiftDetails: null as any
+  })
+  const [dateRange, setDateRange] = useState({
+    startDate: "",
+    endDate: ""
+  })
 
   const isAdmin = user?.role === "admin"
+
+  // Utility functions
+
+  const formatDuration = (hours: number) => {
+    const h = Math.floor(hours)
+    const m = Math.round((hours - h) * 60)
+    return `${h}h ${m}m`
+  }
+
+  const formatDate = (dateString: string) => {
+    return new Date(dateString).toLocaleDateString("en-IN", {
+      year: "numeric",
+      month: "short",
+      day: "numeric"
+    })
+  }
 
   const loadAdminData = async () => {
     if (!isAdmin) return
@@ -33,22 +61,26 @@ export function ShiftManagement() {
       setLoading(true)
       setError("")
       
+      const params = new URLSearchParams()
+      if (dateRange.startDate) params.append("startDate", dateRange.startDate)
+      if (dateRange.endDate) params.append("endDate", dateRange.endDate)
+      
       const [summary, activeShiftsData, cashiersData] = await Promise.all([
-        apiClient.getShiftSummary(),
+        apiClient.getShiftSummary(dateRange),
         apiClient.getActiveShifts(),
         apiClient.getAvailableCashiers()
       ])
       
-      // Fetch all employees for temporary assignment
-      const employeesResponse = await fetch('http://localhost:5001/api/employees', {
-        headers: {
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        }
+      console.log('🔍 Available Cashiers Data:', cashiersData)
+      console.log('🔍 Available Cashiers Data structure:', {
+        hasData: !!cashiersData,
+        hasAvailableCashiers: !!(cashiersData && cashiersData.availableCashiers),
+        availableCashiersLength: cashiersData?.availableCashiers?.length || 0,
+        allCashiersLength: cashiersData?.allCashiers?.length || 0,
+        activeShiftCashiers: cashiersData?.activeShiftCashiers || 0,
+        fullData: JSON.stringify(cashiersData, null, 2)
       })
-      if (employeesResponse.ok) {
-        const employeesData = await employeesResponse.json()
-        setAllEmployees(employeesData.filter((emp: any) => emp.user.role === 'cashier' && emp.user.isActive))
-      }
+      console.log('🔍 Active Shifts Data:', activeShiftsData)
       
       setShiftSummary(summary)
       setActiveShifts(activeShiftsData)
@@ -66,66 +98,38 @@ export function ShiftManagement() {
     }
   }, [isAdmin])
 
-  const handleForceEndShift = async (shiftId: string) => {
+  const handleForceEndShift = (shiftId: string, shiftDetails: any) => {
+    setForceEndShiftDialog({
+      isOpen: true,
+      shiftId,
+      shiftDetails
+    })
+  }
+
+  const confirmForceEndShift = async () => {
     try {
-      await apiClient.forceEndShift(shiftId)
+      await apiClient.forceEndShift(forceEndShiftDialog.shiftId)
       await loadAdminData()
+      setForceEndShiftDialog({
+        isOpen: false,
+        shiftId: "",
+        shiftDetails: null
+      })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to end shift")
     }
   }
 
-  const handleTemporaryAssignment = async () => {
-    if (!selectedAbsentCashier || !selectedTemporaryCashier || !assignmentReason) {
-      setError("Please fill in all fields")
-      return
-    }
-
-    if (selectedAbsentCashier === selectedTemporaryCashier) {
-      setError("Absent cashier and temporary cashier cannot be the same")
-      return
-    }
-
-    try {
-      setIsAssigning(true)
-      setError("")
-      
-      const response = await fetch('http://localhost:5001/api/shifts/assign-temporary', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': `Bearer ${localStorage.getItem('token')}`
-        },
-        body: JSON.stringify({
-          absentCashierId: selectedAbsentCashier,
-          temporaryCashierId: selectedTemporaryCashier,
-          reason: assignmentReason
-        })
-      })
-
-      if (response.ok) {
-        // Reset form
-        setSelectedAbsentCashier("")
-        setSelectedTemporaryCashier("")
-        setAssignmentReason("")
-        
-        // Show success message
-        alert("Temporary cashier assigned successfully!")
-        
-        // Reload data
-        await loadAdminData()
-      } else {
-        const errorData = await response.json()
-        setError(errorData.message || "Failed to assign temporary cashier")
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to assign temporary cashier")
-    } finally {
-      setIsAssigning(false)
-    }
+  const cancelForceEndShift = () => {
+    setForceEndShiftDialog({
+      isOpen: false,
+      shiftId: "",
+      shiftDetails: null
+    })
   }
 
-  const formatCurrency = (amount: number) => {
+
+  const formatCurrency = (amount: number): string => {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
       currency: "INR",
@@ -140,22 +144,23 @@ export function ShiftManagement() {
         </Alert>
       )}
 
-      <Tabs defaultValue="status" className="w-full">
-        <TabsList className={`grid w-full ${isAdmin ? "grid-cols-5" : "grid-cols-2"}`}>
-          <TabsTrigger value="status">Current Shift</TabsTrigger>
+      <Tabs defaultValue={isAdmin ? "overview" : "status"} className="w-full">
+        <TabsList className={`grid w-full ${isAdmin ? "grid-cols-3" : "grid-cols-2"}`}>
+          {!isAdmin && <TabsTrigger value="status">Current Shift</TabsTrigger>}
           <TabsTrigger value="history">Shift History</TabsTrigger>
           {isAdmin && (
             <>
               <TabsTrigger value="overview">Overview</TabsTrigger>
               <TabsTrigger value="active">Active Shifts</TabsTrigger>
-              <TabsTrigger value="temporary">Temporary Assignment</TabsTrigger>
             </>
           )}
         </TabsList>
         
-        <TabsContent value="status" className="space-y-6">
-          <ShiftStatus />
-        </TabsContent>
+        {!isAdmin && (
+          <TabsContent value="status" className="space-y-6">
+            <ShiftStatus />
+          </TabsContent>
+        )}
         
         <TabsContent value="history" className="space-y-6">
           <ShiftHistory />
@@ -164,6 +169,44 @@ export function ShiftManagement() {
         {isAdmin && (
           <>
             <TabsContent value="overview" className="space-y-6">
+              {/* Date Range Filter */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Date Range Filter</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <label className="block text-sm font-medium mb-2">Start Date</label>
+                      <input
+                        type="date"
+                        className="w-full p-2 border rounded-md"
+                        value={dateRange.startDate}
+                        onChange={(e) => setDateRange(prev => ({ ...prev, startDate: e.target.value }))}
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-sm font-medium mb-2">End Date</label>
+                      <input
+                        type="date"
+                        className="w-full p-2 border rounded-md"
+                        value={dateRange.endDate}
+                        onChange={(e) => setDateRange(prev => ({ ...prev, endDate: e.target.value }))}
+                      />
+                    </div>
+                    <div className="flex items-end">
+                      <Button 
+                        onClick={loadAdminData}
+                        className="w-full"
+                        disabled={loading}
+                      >
+                        {loading ? "Loading..." : "Apply Filter"}
+                      </Button>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+              
               {loading ? (
                 <Card>
                   <CardContent className="flex items-center justify-center py-8">
@@ -173,7 +216,7 @@ export function ShiftManagement() {
                 </Card>
               ) : shiftSummary ? (
                 <>
-                  {/* Summary Cards */}
+                  {/* Enhanced Summary Cards */}
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
                     <Card>
                       <CardContent className="flex items-center p-6">
@@ -181,6 +224,9 @@ export function ShiftManagement() {
                         <div>
                           <p className="text-sm text-muted-foreground">Total Shifts</p>
                           <p className="text-2xl font-bold">{shiftSummary.totalShifts}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {shiftSummary.activeShifts} active • {shiftSummary.closedShifts} closed
+                          </p>
                         </div>
                       </CardContent>
                     </Card>
@@ -191,51 +237,124 @@ export function ShiftManagement() {
                         <div>
                           <p className="text-sm text-muted-foreground">Total Sales</p>
                           <p className="text-2xl font-bold">{formatCurrency(shiftSummary.totalSales)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {shiftSummary.totalBills} bills • {formatCurrency(shiftSummary.totalSales / shiftSummary.totalBills || 0)} avg/bill
+                          </p>
                         </div>
                       </CardContent>
                     </Card>
                     
                     <Card>
                       <CardContent className="flex items-center p-6">
-                        <Users className="h-8 w-8 text-purple-600 mr-3" />
+                        <Timer className="h-8 w-8 text-purple-600 mr-3" />
                         <div>
-                          <p className="text-sm text-muted-foreground">Active Shifts</p>
-                          <p className="text-2xl font-bold">{shiftSummary.activeShifts}</p>
+                          <p className="text-sm text-muted-foreground">Avg Duration</p>
+                          <p className="text-2xl font-bold">{formatDuration(shiftSummary.averageShiftDuration)}</p>
+                          <p className="text-xs text-muted-foreground">
+                            Per closed shift
+                          </p>
                         </div>
                       </CardContent>
                     </Card>
                     
                     <Card>
                       <CardContent className="flex items-center p-6">
-                        <AlertTriangle className="h-8 w-8 text-orange-600 mr-3" />
+                        <DollarSign className="h-8 w-8 text-orange-600 mr-3" />
                         <div>
-                          <p className="text-sm text-muted-foreground">Avg Sales/Shift</p>
-                          <p className="text-2xl font-bold">{formatCurrency(shiftSummary.averageSalesPerShift)}</p>
+                          <p className="text-sm text-muted-foreground">Cash Variance</p>
+                          <p className={`text-2xl font-bold ${shiftSummary.totalCashVariance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                            {formatCurrency(shiftSummary.totalCashVariance)}
+                          </p>
+                          <p className="text-xs text-muted-foreground">
+                            {formatCurrency(shiftSummary.averageCashVariance)} avg/shift
+                          </p>
                         </div>
                       </CardContent>
                     </Card>
                   </div>
                   
-                  {/* Shifts by Cashier */}
+                  {/* Peak Hours Analysis */}
                   <Card>
                     <CardHeader>
-                      <CardTitle>Shift Performance by Cashier</CardTitle>
+                      <CardTitle className="flex items-center gap-2">
+                        <BarChart3 className="h-5 w-5" />
+                        Peak Sales Hours
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent>
+                      {shiftSummary.peakHours && shiftSummary.peakHours.length > 0 ? (
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                          {shiftSummary.peakHours.map((peak: any, index: number) => (
+                            <div key={index} className="p-4 border rounded-lg">
+                              <div className="flex items-center justify-between mb-2">
+                                <Badge variant={index === 0 ? "default" : "secondary"}>
+                                  #{index + 1}
+                                </Badge>
+                                <span className="font-semibold">{peak.hour}</span>
+                              </div>
+                              <div className="space-y-1">
+                                <p className="text-sm">Sales: {formatCurrency(peak.totalSales)}</p>
+                                <p className="text-xs text-muted-foreground">{peak.shiftCount} shifts</p>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      ) : (
+                        <p className="text-muted-foreground text-center py-4">No peak hours data available</p>
+                      )}
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Enhanced Cashier Performance */}
+                  <Card>
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2">
+                        <Target className="h-5 w-5" />
+                        Detailed Cashier Performance
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       <div className="space-y-4">
                         {Object.entries(shiftSummary.shiftsByCashier).map(([cashierName, data]: [string, any]) => (
-                          <div key={cashierName} className="flex items-center justify-between p-4 border rounded-lg">
-                            <div>
-                              <p className="font-medium">{cashierName}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {data.totalShifts} shifts • {data.totalBills} bills
-                              </p>
+                          <div key={cashierName} className="p-4 border rounded-lg">
+                            <div className="flex items-center justify-between mb-3">
+                              <div>
+                                <p className="font-semibold text-lg">{cashierName}</p>
+                                <div className="flex gap-4 text-sm text-muted-foreground">
+                                  <span>{data.totalShifts} total shifts</span>
+                                  <span>{data.activeShifts} active</span>
+                                  <span>{data.closedShifts} closed</span>
+                                </div>
+                              </div>
+                              <div className="text-right">
+                                <p className="font-bold text-lg">{formatCurrency(data.totalSales)}</p>
+                                <p className="text-sm text-muted-foreground">Total Sales</p>
+                              </div>
                             </div>
-                            <div className="text-right">
-                              <p className="font-bold text-lg">{formatCurrency(data.totalSales)}</p>
-                              <p className="text-sm text-muted-foreground">
-                                {data.totalShifts > 0 ? formatCurrency(data.totalSales / data.totalShifts) : formatCurrency(0)} avg
-                              </p>
+                            
+                            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+                              <div>
+                                <p className="text-muted-foreground">Bills</p>
+                                <p className="font-medium">{data.totalBills}</p>
+                                <p className="text-xs text-muted-foreground">{data.averageBillsPerShift.toFixed(1)}/shift</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">Avg Sales</p>
+                                <p className="font-medium">{formatCurrency(data.averageSalesPerShift)}</p>
+                                <p className="text-xs text-muted-foreground">per shift</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">Duration</p>
+                                <p className="font-medium">{formatDuration(data.averageDuration)}</p>
+                                <p className="text-xs text-muted-foreground">avg shift</p>
+                              </div>
+                              <div>
+                                <p className="text-muted-foreground">Cash Variance</p>
+                                <p className={`font-medium ${data.cashVariance >= 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                  {formatCurrency(data.cashVariance)}
+                                </p>
+                                <p className="text-xs text-muted-foreground">total variance</p>
+                              </div>
                             </div>
                           </div>
                         ))}
@@ -257,33 +376,63 @@ export function ShiftManagement() {
               ) : (
                 <>
                   {/* Available Cashiers */}
-                  {availableCashiers && (
+                  {console.log('🔍 Rendering available cashiers section:', {
+                    availableCashiers: !!availableCashiers,
+                    hasAllCashiers: !!(availableCashiers && availableCashiers.allCashiers),
+                    allCashiersArray: availableCashiers?.allCashiers,
+                    allCashiersLength: availableCashiers?.allCashiers?.length || 0,
+                    availableCashiersLength: availableCashiers?.availableCashiers?.length || 0
+                  })}
+                  {availableCashiers && availableCashiers.allCashiers && (
                     <Card>
                       <CardHeader>
                         <CardTitle className="flex items-center justify-between">
-                          <span>Available Cashiers</span>
-                          <Badge variant="secondary">
-                            {availableCashiers.availableCashiers.length} available
-                          </Badge>
+                          <span>All Cashiers</span>
+                          <div className="flex gap-2">
+                            <Badge variant="secondary">
+                              {availableCashiers.allCashiers.length} total
+                            </Badge>
+                            <Badge variant="outline">
+                              {availableCashiers.availableCashiers.length} available
+                            </Badge>
+                            <Badge variant="destructive">
+                              {availableCashiers.activeShiftCashiers} on shift
+                            </Badge>
+                          </div>
                         </CardTitle>
                       </CardHeader>
                       <CardContent>
-                        {availableCashiers.availableCashiers.length > 0 ? (
+                        {availableCashiers.allCashiers.length > 0 ? (
                           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                            {availableCashiers.availableCashiers.map((cashier: any) => (
-                              <div key={cashier._id} className="p-4 border rounded-lg">
-                                <p className="font-medium">{cashier.user.name}</p>
-                                <p className="text-sm text-muted-foreground">{cashier.user.employeeId}</p>
-                                <p className="text-sm text-muted-foreground">{cashier.user.email}</p>
-                                <Badge variant="outline" className="mt-2">
-                                  {cashier.employmentDetails.department}
-                                </Badge>
-                              </div>
-                            ))}
+                            {availableCashiers.allCashiers.map((cashier: any) => {
+                              // Check if this cashier is currently on an active shift
+                              const isOnActiveShift = !availableCashiers.availableCashiers.some(
+                                (availableCashier: any) => availableCashier._id === cashier._id
+                              );
+                              
+                              return (
+                                <div 
+                                  key={cashier._id} 
+                                  className={`p-4 border rounded-lg ${isOnActiveShift ? 'bg-destructive/10 border-destructive/30 dark:bg-destructive/20 dark:border-destructive/40' : 'bg-green-100 border-green-300 dark:bg-green-900/30 dark:border-green-700'}`}
+                                >
+                                  <div className="flex items-center justify-between mb-2">
+                                    <p className="font-medium">{cashier.user.name}</p>
+                                    <Badge variant={isOnActiveShift ? "destructive" : "default"}>
+                                      {isOnActiveShift ? "On Shift" : "Available"}
+                                    </Badge>
+                                  </div>
+                                  <p className="text-sm text-muted-foreground">{cashier.user.employeeId}</p>
+                                  <p className="text-sm text-muted-foreground">{cashier.user.email}</p>
+                                  <Badge variant="outline" className="mt-2">
+                                    {cashier.employmentDetails.department}
+                                  </Badge>
+                                </div>
+                              );
+                            })}
                           </div>
                         ) : (
                           <p className="text-center text-muted-foreground py-4">
-                            No available cashiers. All cashiers are currently on active shifts.
+                            No cashiers found in the system.
                           </p>
                         )}
                       </CardContent>
@@ -293,44 +442,70 @@ export function ShiftManagement() {
                   {/* Active Shifts */}
                   <Card>
                     <CardHeader>
-                      <CardTitle>Currently Active Shifts</CardTitle>
+                      <CardTitle className="flex items-center justify-between">
+                        <span>Currently Active Shifts</span>
+                        <Badge variant="destructive">
+                          {activeShifts.length} active
+                        </Badge>
+                      </CardTitle>
                     </CardHeader>
                     <CardContent>
                       {activeShifts.length > 0 ? (
                         <div className="space-y-4">
                           {activeShifts.map((shift) => (
-                            <div key={shift._id} className="flex items-center justify-between p-4 border rounded-lg">
-                              <div>
-                                <p className="font-medium">{shift.cashier?.name || "Unknown"}</p>
+                            <div key={shift._id} className="flex items-center justify-between p-4 border rounded-lg bg-green-100 border-green-300 dark:bg-green-900/30 dark:border-green-700">
+                              <div className="flex-1">
+                                <div className="flex items-center gap-3 mb-2">
+                                  <p className="font-medium text-lg">{shift.cashier?.name || "Unknown"}</p>
+                                  <Badge className="bg-green-600 dark:bg-green-700">Active Shift</Badge>
+                                </div>
                                 <p className="text-sm text-muted-foreground">
-                                  ID: {shift.cashier?.employeeId || "N/A"}
+                                  Employee ID: {shift.cashier?.employeeId || "N/A"}
                                 </p>
                                 <p className="text-sm text-muted-foreground">
                                   Started: {new Date(shift.startTime).toLocaleString()}
                                 </p>
-                                <div className="flex gap-4 mt-2">
-                                  <span className="text-sm">Sales: {formatCurrency(shift.totalSales)}</span>
-                                  <span className="text-sm">Bills: {shift.totalBills}</span>
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mt-3">
+                                  <div className="text-center p-2 bg-background rounded border">
+                                    <p className="text-xs text-muted-foreground">Opening Cash</p>
+                                    <p className="font-semibold">{formatCurrency(shift.openingCash)}</p>
+                                  </div>
+                                  <div className="text-center p-2 bg-background rounded border">
+                                    <p className="text-xs text-muted-foreground">Total Sales</p>
+                                    <p className="font-semibold text-green-600 dark:text-green-400">{formatCurrency(shift.totalSales)}</p>
+                                  </div>
+                                  <div className="text-center p-2 bg-background rounded border">
+                                    <p className="text-xs text-muted-foreground">Bills</p>
+                                    <p className="font-semibold">{shift.totalBills}</p>
+                                  </div>
+                                  <div className="text-center p-2 bg-background rounded border">
+                                    <p className="text-xs text-muted-foreground">Duration</p>
+                                    <p className="font-semibold">
+                                      {formatDuration((new Date().getTime() - new Date(shift.startTime).getTime()) / (1000 * 60 * 60))}
+                                    </p>
+                                  </div>
                                 </div>
                               </div>
-                              <div className="text-right">
-                                <Badge className="bg-green-600 mb-2">Active</Badge>
-                                <br />
+                              <div className="ml-4">
                                 <Button
                                   size="sm"
                                   variant="destructive"
-                                  onClick={() => handleForceEndShift(shift._id)}
+                                  onClick={() => handleForceEndShift(shift._id, shift)}
+                                  className="whitespace-nowrap"
                                 >
-                                  Force End
+                                  Force End Shift
                                 </Button>
                               </div>
                             </div>
                           ))}
                         </div>
                       ) : (
-                        <p className="text-center text-muted-foreground py-4">
-                          No active shifts at the moment.
-                        </p>
+                        <div className="text-center py-8">
+                          <div className="text-muted-foreground mb-2">No active shifts at the moment.</div>
+                          <div className="text-sm text-muted-foreground">
+                            All cashiers are currently available to start their shifts.
+                          </div>
+                        </div>
                       )}
                     </CardContent>
                   </Card>
@@ -338,90 +513,58 @@ export function ShiftManagement() {
               )}
             </TabsContent>
             
-            <TabsContent value="temporary" className="space-y-6">
-              <Card>
-                <CardHeader>
-                  <CardTitle className="flex items-center">
-                    <UserPlus className="h-5 w-5 mr-2" />
-                    Assign Temporary Cashier
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Absent Cashier</label>
-                      <select 
-                        className="w-full p-2 border rounded-md"
-                        value={selectedAbsentCashier}
-                        onChange={(e) => setSelectedAbsentCashier(e.target.value)}
-                      >
-                        <option value="">Select absent cashier...</option>
-                        {allEmployees
-                          .filter(emp => activeShifts.some(shift => shift.cashier?._id === emp.user._id))
-                          .map((employee) => (
-                            <option key={employee._id} value={employee.user._id}>
-                              {employee.user.name} ({employee.user.employeeId})
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-                    
-                    <div className="space-y-2">
-                      <label className="text-sm font-medium">Temporary Cashier</label>
-                      <select 
-                        className="w-full p-2 border rounded-md"
-                        value={selectedTemporaryCashier}
-                        onChange={(e) => setSelectedTemporaryCashier(e.target.value)}
-                      >
-                        <option value="">Select temporary cashier...</option>
-                        {allEmployees
-                          .filter(emp => !activeShifts.some(shift => shift.cashier?._id === emp.user._id))
-                          .map((employee) => (
-                            <option key={employee._id} value={employee.user._id}>
-                              {employee.user.name} ({employee.user.employeeId})
-                            </option>
-                          ))}
-                      </select>
-                    </div>
-                  </div>
-                  
-                  <div className="space-y-2">
-                    <label className="text-sm font-medium">Reason for Assignment</label>
-                    <textarea 
-                      className="w-full p-2 border rounded-md"
-                      rows={3}
-                      placeholder="e.g., Employee on medical leave, personal emergency, etc."
-                      value={assignmentReason}
-                      onChange={(e) => setAssignmentReason(e.target.value)}
-                    />
-                  </div>
-                  
-                  <div className="flex justify-end">
-                    <Button 
-                      onClick={handleTemporaryAssignment}
-                      disabled={isAssigning || !selectedAbsentCashier || !selectedTemporaryCashier || !assignmentReason}
-                    >
-                      {isAssigning ? "Assigning..." : "Assign Temporary Cashier"}
-                    </Button>
-                  </div>
-                </CardContent>
-              </Card>
-              
-              {/* Current Temporary Assignments */}
-              <Card>
-                <CardHeader>
-                  <CardTitle>Current Temporary Assignments</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <p className="text-center text-muted-foreground py-4">
-                    No active temporary assignments at the moment.
-                  </p>
-                </CardContent>
-              </Card>
-            </TabsContent>
           </>
         )}
       </Tabs>
+
+      {/* Force End Shift Confirmation Dialog */}
+      <Dialog open={forceEndShiftDialog.isOpen} onOpenChange={cancelForceEndShift}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertTriangle className="h-5 w-5 text-destructive" />
+              Confirm Force End Shift
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to force end the shift for {forceEndShiftDialog.shiftDetails?.employeeName}? 
+              This action cannot be undone and may affect the employee's current session.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {forceEndShiftDialog.shiftDetails && (
+            <div className="space-y-3 p-4 bg-muted rounded-lg">
+              <h4 className="font-medium">Shift Details</h4>
+              <div className="space-y-2 text-sm">
+                <div className="flex justify-between">
+                  <span>Employee:</span>
+                  <span>{forceEndShiftDialog.shiftDetails.employeeName}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Start Time:</span>
+                  <span>{new Date(forceEndShiftDialog.shiftDetails.startTime).toLocaleString()}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Total Sales:</span>
+                  <span className="text-green-600 dark:text-green-400">{formatCurrency(forceEndShiftDialog.shiftDetails.totalSales)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span>Bills Created:</span>
+                  <span>{forceEndShiftDialog.shiftDetails.totalBills}</span>
+                </div>
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={cancelForceEndShift}>
+              Cancel
+            </Button>
+            <Button type="button" variant="destructive" onClick={confirmForceEndShift}>
+              Force End Shift
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }

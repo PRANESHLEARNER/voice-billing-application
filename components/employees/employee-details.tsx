@@ -227,48 +227,12 @@ export function EmployeeDetails({ employee, onClose }: EmployeeDetailsProps) {
                   </div>
                 </div>
                 <div>
-                  <p className="text-sm font-medium text-muted-foreground">Salary</p>
-                  <p className="text-lg">{formatCurrency(employee.employmentDetails.salary)}</p>
-                </div>
-                <div>
                   <p className="text-sm font-medium text-muted-foreground">Role</p>
                   <p className="text-lg capitalize">{employee.user.role}</p>
                 </div>
               </CardContent>
             </Card>
 
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <CreditCard className="w-5 h-5" />
-                  Bank Account Details
-                </CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                {employee.employmentDetails.bankAccount ? (
-                  <>
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">Account Number</p>
-                      <p className="text-lg">{employee.employmentDetails.bankAccount.accountNumber}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">Bank Name</p>
-                      <p className="text-lg">{employee.employmentDetails.bankAccount.bankName}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">IFSC Code</p>
-                      <p className="text-lg">{employee.employmentDetails.bankAccount.ifscCode}</p>
-                    </div>
-                    <div>
-                      <p className="text-sm font-medium text-muted-foreground">Branch Name</p>
-                      <p className="text-lg">{employee.employmentDetails.bankAccount.branchName}</p>
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-muted-foreground">No bank account details provided</p>
-                )}
-              </CardContent>
-            </Card>
           </div>
 
           <Card>

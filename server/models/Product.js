@@ -82,6 +82,11 @@ const productSchema = new mongoose.Schema(
       min: 0,
       max: 100,
     },
+    stock: {
+      type: Number,
+      default: 0,
+      min: 0,
+    },
     isActive: {
       type: Boolean,
       default: true,
@@ -92,6 +97,35 @@ const productSchema = new mongoose.Schema(
     timestamps: true,
   },
 )
+
+// Pre-save hook for immediate stock notifications
+productSchema.pre('save', async function(next) {
+  try {
+    // Only trigger for existing documents (not new ones)
+    if (this.isNew) {
+      return next();
+    }
+    
+    // Check if stock has changed
+    if (this.isModified('stock') || this.isModified('variants')) {
+      const { triggerStockChangeCheck } = require('../services/immediateStockNotifier');
+      
+      // Trigger immediate stock change check
+      setTimeout(async () => {
+        try {
+          await triggerStockChangeCheck();
+        } catch (error) {
+          console.error('❌ Error in immediate stock notification hook:', error);
+        }
+      }, 100); // Small delay to ensure save completes
+    }
+    
+    next();
+  } catch (error) {
+    console.error('❌ Error in pre-save hook:', error);
+    next();
+  }
+});
 
 // Static method to find existing product or create new one
 productSchema.statics.findOrCreateProduct = async function(productData) {

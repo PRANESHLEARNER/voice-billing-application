@@ -1,6 +1,7 @@
 const express = require("express")
 const Product = require("../models/Product")
 const { auth, adminAuth } = require("../middleware/auth")
+const { triggerStockChangeCheck } = require("../services/immediateStockNotifier")
 
 const router = express.Router()
 
@@ -168,14 +169,74 @@ router.post("/check-duplicates", auth, adminAuth, async (req, res) => {
 // Update product (Admin only)
 router.put("/:id", auth, adminAuth, async (req, res) => {
   try {
-    const product = await Product.findByIdAndUpdate(req.params.id, req.body, { new: true, runValidators: true })
+    // Filter out immutable fields that shouldn't be updated
+    const { _id, createdAt, updatedAt, __v, ...updateData } = req.body;
+    
+    // Log the update data for debugging
+    console.log('🔄 Updating product:', req.params.id);
+    console.log('🔄 Update data:', JSON.stringify(updateData, null, 2));
+    
+    // Handle stock validation for products with variants
+    if (updateData.variants && updateData.variants.length > 0) {
+      // If product has variants, calculate main stock as sum of variant stocks
+      const totalVariantStock = updateData.variants.reduce((sum, variant) => {
+        return sum + (variant.stock || 0);
+      }, 0);
+      
+      // Set main stock to total of variant stocks (ensure it's not negative)
+      updateData.stock = Math.max(0, totalVariantStock);
+      
+      console.log('🔄 Product has variants, setting main stock to sum of variants:', updateData.stock);
+    } else if (updateData.stock !== undefined && updateData.stock < 0) {
+      // Ensure stock is not negative for products without variants
+      updateData.stock = 0;
+      console.log('🔄 Stock was negative, setting to 0');
+    }
+    
+    const product = await Product.findByIdAndUpdate(
+      req.params.id, 
+      updateData, 
+      { new: true, runValidators: true }
+    )
 
     if (!product) {
       return res.status(404).json({ message: "Product not found" })
     }
 
+    console.log('✅ Product updated successfully:', product.name);
+
+    // Trigger immediate stock change check if stock was modified
+    // Run in background without blocking the response
+    if (updateData.stock !== undefined || updateData.variants !== undefined) {
+      console.log('🔄 Triggering stock change check in background...');
+      // Don't await this - let it run in background
+      triggerStockChangeCheck().catch(error => {
+        console.error('❌ Background stock change check failed:', error.message);
+      });
+    }
+
     res.json(product)
   } catch (error) {
+    console.error('❌ Product update error:', error.message);
+    console.error('❌ Error details:', error);
+    
+    // Handle specific validation errors
+    if (error.name === 'ValidationError') {
+      const messages = Object.values(error.errors).map(val => val.message);
+      return res.status(400).json({ 
+        message: "Validation failed", 
+        errors: messages 
+      });
+    }
+    
+    // Handle duplicate key errors
+    if (error.code === 11000) {
+      const field = Object.keys(error.keyPattern)[0];
+      return res.status(400).json({ 
+        message: `${field} already exists` 
+      });
+    }
+    
     res.status(500).json({ message: "Server error", error: error.message })
   }
 })

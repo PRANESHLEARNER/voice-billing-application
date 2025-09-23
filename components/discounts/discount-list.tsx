@@ -8,7 +8,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
-import { Plus, Search, Filter, Edit, Trash2, ToggleLeft, ToggleRight, Calendar, Tag, Target } from "lucide-react"
+import { Plus, Search, Filter, Edit, Trash2, ToggleLeft, ToggleRight, Calendar, Tag, Target, AlertCircle } from "lucide-react"
 import { apiClient, type Discount } from "@/lib/api"
 import { DiscountForm } from "./discount-form"
 import { DiscountDetails } from "./discount-details"
@@ -25,6 +25,8 @@ export function DiscountList() {
   const [isFormOpen, setIsFormOpen] = useState(false)
   const [isDetailsOpen, setIsDetailsOpen] = useState(false)
   const [editingDiscount, setEditingDiscount] = useState<Discount | null>(null)
+  const [confirmToggleOpen, setConfirmToggleOpen] = useState(false)
+  const [discountToToggle, setDiscountToToggle] = useState<Discount | null>(null)
 
   const fetchDiscounts = async () => {
     try {
@@ -51,9 +53,21 @@ export function DiscountList() {
   }, [currentPage, searchTerm, targetTypeFilter, isActiveFilter])
 
   const handleToggleStatus = async (discountId: string) => {
+    const discount = discounts.find(d => d._id === discountId)
+    if (discount) {
+      setDiscountToToggle(discount)
+      setConfirmToggleOpen(true)
+    }
+  }
+
+  const confirmToggleStatus = async () => {
+    if (!discountToToggle) return
+
     try {
-      await apiClient.toggleDiscountStatus(discountId)
+      await apiClient.toggleDiscountStatus(discountToToggle._id)
       await fetchDiscounts()
+      setConfirmToggleOpen(false)
+      setDiscountToToggle(null)
     } catch (error) {
       console.error("Error toggling discount status:", error)
     }
@@ -377,6 +391,41 @@ export function DiscountList() {
           {selectedDiscount && (
             <DiscountDetails discount={selectedDiscount} />
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Confirm Toggle Status Dialog */}
+      <Dialog open={confirmToggleOpen} onOpenChange={setConfirmToggleOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <AlertCircle className="h-5 w-5 text-amber-500" />
+              Confirm Status Change
+            </DialogTitle>
+            <DialogDescription>
+              Are you sure you want to change discount from 
+              <span className="font-semibold">
+                {discountToToggle?.isActive ? " active " : " inactive "}
+              </span> to 
+              <span className="font-semibold">
+                {discountToToggle?.isActive ? " inactive " : " active "}
+              </span>?
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex justify-end gap-3 mt-4">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setConfirmToggleOpen(false)
+                setDiscountToToggle(null)
+              }}
+            >
+              Cancel
+            </Button>
+            <Button onClick={confirmToggleStatus}>
+              Confirm
+            </Button>
+          </div>
         </DialogContent>
       </Dialog>
     </div>

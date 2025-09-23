@@ -6,10 +6,11 @@ import { Badge } from "@/components/ui/badge"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { Eye, FileText, Loader2, Printer, RefreshCw } from "lucide-react"
+import { Eye, FileText, Loader2, Printer, RefreshCw, Trash2 } from "lucide-react"
 import { apiClient, type Bill, type BillsResponse } from "@/lib/api"
 import { BillSearch, type BillSearchFilters } from "./bill-search"
 import { BillDetailsDialog } from "./bill-details-dialog"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 
 export function BillList() {
   const [bills, setBills] = useState<Bill[]>([])
@@ -64,6 +65,7 @@ export function BillList() {
       setError(err instanceof Error ? err.message : "Failed to load bill details")
     }
   }
+
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -269,6 +271,7 @@ export function BillList() {
           setSelectedBill(null)
         }}
       />
+
     </div>
   )
 }

@@ -138,40 +138,205 @@ router.get("/summary", auth, async (req, res) => {
 
     if (startDate || endDate) {
       query.startTime = {}
-      if (startDate) query.startTime.$gte = new Date(startDate)
-      if (endDate) query.startTime.$lte = new Date(endDate)
+      if (startDate) {
+        try {
+          query.startTime.$gte = new Date(startDate)
+        } catch (e) {
+          console.error("Invalid startDate:", startDate, e)
+          return res.status(400).json({ message: "Invalid startDate format" })
+        }
+      }
+      if (endDate) {
+        try {
+          query.startTime.$lte = new Date(endDate)
+        } catch (e) {
+          console.error("Invalid endDate:", endDate, e)
+          return res.status(400).json({ message: "Invalid endDate format" })
+        }
+      }
     }
 
+    console.log("Shift query:", query)
     const shifts = await Shift.find(query).populate("cashier", "name employeeId")
+    console.log("Found shifts:", shifts.length)
+    
+    // Calculate enhanced metrics
+    const closedShifts = shifts.filter(s => s.status === "closed")
+    const activeShifts = shifts.filter(s => s.status === "active")
+    
+    console.log("Closed shifts:", closedShifts.length, "Active shifts:", activeShifts.length)
+    
+    // Calculate shift durations
+    const shiftDurations = closedShifts.map(shift => {
+      try {
+        const duration = shift.endTime && shift.startTime ? shift.endTime - shift.startTime : 0
+        return {
+          duration: duration / (1000 * 60 * 60), // Convert to hours
+          cashier: shift.cashierName,
+          startTime: shift.startTime,
+          endTime: shift.endTime
+        }
+      } catch (e) {
+        console.error("Error calculating duration for shift:", shift._id, e)
+        return {
+          duration: 0,
+          cashier: shift.cashierName,
+          startTime: shift.startTime,
+          endTime: shift.endTime
+        }
+      }
+    })
+    
+    const avgShiftDuration = shiftDurations.length > 0 
+      ? shiftDurations.reduce((sum, s) => sum + s.duration, 0) / shiftDurations.length 
+      : 0
+    
+    // Calculate cash variance
+    const cashVariance = closedShifts.map(shift => {
+      try {
+        const expectedCash = (shift.openingCash || 0) + (shift.totalSales || 0)
+        const variance = (shift.closingCash || 0) - expectedCash
+        return {
+          variance,
+          openingCash: shift.openingCash || 0,
+          closingCash: shift.closingCash || 0,
+          totalSales: shift.totalSales || 0,
+          cashier: shift.cashierName
+        }
+      } catch (e) {
+        console.error("Error calculating variance for shift:", shift._id, e)
+        return {
+          variance: 0,
+          openingCash: 0,
+          closingCash: 0,
+          totalSales: 0,
+          cashier: shift.cashierName
+        }
+      }
+    })
+    
+    const totalCashVariance = cashVariance.reduce((sum, cv) => sum + cv.variance, 0)
+    const averageCashVariance = cashVariance.length > 0 ? totalCashVariance / cashVariance.length : 0
+    
+    // Peak hours analysis
+    const hourlySales = {}
+    closedShifts.forEach(shift => {
+      try {
+        if (shift.startTime) {
+          const hour = new Date(shift.startTime).getHours()
+          const hourKey = `${hour}:00-${hour + 1}:00`
+          if (!hourlySales[hourKey]) {
+            hourlySales[hourKey] = { totalSales: 0, shiftCount: 0 }
+          }
+          hourlySales[hourKey].totalSales += shift.totalSales || 0
+          hourlySales[hourKey].shiftCount++
+        }
+      } catch (e) {
+        console.error("Error processing peak hours for shift:", shift._id, e)
+      }
+    })
+    
+    const peakHours = Object.entries(hourlySales)
+      .sort(([,a], [,b]) => b.totalSales - a.totalSales)
+      .slice(0, 3)
+      .map(([hour, data]) => ({ hour, ...data }))
     
     const summary = {
+      // Basic metrics
       totalShifts: shifts.length,
-      activeShifts: shifts.filter(s => s.status === "active").length,
-      closedShifts: shifts.filter(s => s.status === "closed").length,
-      totalSales: shifts.reduce((sum, s) => sum + s.totalSales, 0),
-      totalBills: shifts.reduce((sum, s) => sum + s.totalBills, 0),
-      averageSalesPerShift: shifts.length > 0 ? shifts.reduce((sum, s) => sum + s.totalSales, 0) / shifts.length : 0,
+      activeShifts: activeShifts.length,
+      closedShifts: closedShifts.length,
+      totalSales: shifts.reduce((sum, s) => sum + (s.totalSales || 0), 0),
+      totalBills: shifts.reduce((sum, s) => sum + (s.totalBills || 0), 0),
+      averageSalesPerShift: shifts.length > 0 ? shifts.reduce((sum, s) => sum + (s.totalSales || 0), 0) / shifts.length : 0,
+      
+      // Enhanced metrics
+      averageShiftDuration: avgShiftDuration,
+      totalCashVariance,
+      averageCashVariance,
+      peakHours,
+      
+      // Cash handling summary
+      totalOpeningCash: closedShifts.reduce((sum, s) => sum + (s.openingCash || 0), 0),
+      totalClosingCash: closedShifts.reduce((sum, s) => sum + (s.closingCash || 0), 0),
+      
       shiftsByCashier: {}
     }
 
-    // Group shifts by cashier
+    // Group shifts by cashier with enhanced metrics
     shifts.forEach(shift => {
-      const cashierName = shift.cashier?.name || "Unknown"
-      if (!summary.shiftsByCashier[cashierName]) {
-        summary.shiftsByCashier[cashierName] = {
-          totalShifts: 0,
-          totalSales: 0,
-          totalBills: 0
+      try {
+        const cashierName = shift.cashier?.name || shift.cashierName || "Unknown"
+        if (!summary.shiftsByCashier[cashierName]) {
+          summary.shiftsByCashier[cashierName] = {
+            totalShifts: 0,
+            activeShifts: 0,
+            closedShifts: 0,
+            totalSales: 0,
+            totalBills: 0,
+            totalDuration: 0,
+            cashVariance: 0,
+            totalOpeningCash: 0,
+            totalClosingCash: 0,
+            averageBillsPerShift: 0,
+            averageSalesPerShift: 0,
+            averageDuration: 0
+          }
         }
+        
+        const cashierData = summary.shiftsByCashier[cashierName]
+        cashierData.totalShifts++
+        cashierData.totalSales += shift.totalSales || 0
+        cashierData.totalBills += shift.totalBills || 0
+        
+        if (shift.status === "active") {
+          cashierData.activeShifts++
+        } else {
+          cashierData.closedShifts++
+          cashierData.totalOpeningCash += shift.openingCash || 0
+          cashierData.totalClosingCash += shift.closingCash || 0
+          
+          // Calculate duration for closed shifts
+          if (shift.endTime && shift.startTime) {
+            try {
+              const duration = (shift.endTime - shift.startTime) / (1000 * 60 * 60) // hours
+              cashierData.totalDuration += duration
+            } catch (e) {
+              console.error("Error calculating duration for cashier:", cashierName, e)
+            }
+          }
+          
+          // Calculate cash variance
+          try {
+            const expectedCash = (shift.openingCash || 0) + (shift.totalSales || 0)
+            const variance = (shift.closingCash || 0) - expectedCash
+            cashierData.cashVariance += variance
+          } catch (e) {
+            console.error("Error calculating variance for cashier:", cashierName, e)
+          }
+        }
+      } catch (e) {
+        console.error("Error processing shift for cashier grouping:", shift._id, e)
       }
-      summary.shiftsByCashier[cashierName].totalShifts++
-      summary.shiftsByCashier[cashierName].totalSales += shift.totalSales
-      summary.shiftsByCashier[cashierName].totalBills += shift.totalBills
+    })
+    
+    // Calculate averages for each cashier
+    Object.keys(summary.shiftsByCashier).forEach(cashierName => {
+      try {
+        const data = summary.shiftsByCashier[cashierName]
+        data.averageBillsPerShift = data.totalShifts > 0 ? data.totalBills / data.totalShifts : 0
+        data.averageSalesPerShift = data.totalShifts > 0 ? data.totalSales / data.totalShifts : 0
+        data.averageDuration = data.closedShifts > 0 ? data.totalDuration / data.closedShifts : 0
+      } catch (e) {
+        console.error("Error calculating averages for cashier:", cashierName, e)
+      }
     })
 
+    console.log("Summary generated successfully")
     res.json(summary)
   } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message })
+    console.error("Detailed error in summary endpoint:", error)
+    res.status(500).json({ message: "Server error", error: error.message, stack: error.stack })
   }
 })
 
@@ -214,94 +379,90 @@ router.get("/available-cashiers", auth, async (req, res) => {
       return res.status(403).json({ message: "Admin access required" })
     }
 
+    console.log('🔍 Getting available cashiers...')
+
     // Get all active employees with cashier role
     const cashiers = await Employee.find({
-      "user.role": "cashier",
       status: "active"
-    }).populate("user", "name email employeeId")
+    }).populate("user", "name email employeeId role")
+    
+    // Filter for cashier role after population (more reliable)
+    const cashierRoleEmployees = cashiers.filter(employee => 
+      employee.user && employee.user.role === "cashier"
+    )
+    
+    console.log('🔍 All active employees:', cashiers.length)
+    console.log('🔍 Employees with cashier role:', cashierRoleEmployees.length)
+    console.log('🔍 All employees details:', cashiers.map(c => ({
+      id: c._id,
+      name: c.user?.name,
+      email: c.user?.email,
+      employeeId: c.user?.employeeId,
+      role: c.user?.role,
+      department: c.employmentDetails?.department,
+      status: c.status,
+      userExists: !!c.user
+    })))
+    console.log('🔍 Cashier role employees details:', cashierRoleEmployees.map(c => ({
+      id: c._id,
+      name: c.user?.name,
+      email: c.user?.email,
+      employeeId: c.user?.employeeId,
+      role: c.user?.role,
+      department: c.employmentDetails?.department,
+      status: c.status
+    })))
+
+    console.log('🔍 All cashiers found:', cashiers.length, cashiers)
+    console.log('🔍 Cashier details:', cashiers.map(c => ({
+      id: c._id,
+      name: c.user?.name,
+      email: c.user?.email,
+      employeeId: c.user?.employeeId,
+      department: c.employmentDetails?.department,
+      status: c.status
+    })))
 
     // Get cashiers with active shifts
     const activeShiftCashiers = await Shift.find({
       status: "active"
     }).select("cashier")
 
+    console.log('🔍 Active shifts found:', activeShiftCashiers.length, activeShiftCashiers)
+    console.log('🔍 Active shift cashier IDs:', activeShiftCashiers.map(s => s.cashier))
+
     const activeCashierIds = activeShiftCashiers.map(s => s.cashier.toString())
+    console.log('🔍 Active cashier IDs (string):', activeCashierIds)
 
-    const availableCashiers = cashiers.filter(cashier => 
-      !activeCashierIds.includes(cashier.user._id.toString())
-    )
+    const availableCashiers = cashierRoleEmployees.filter(cashier => {
+      const cashierUserId = cashier.user._id.toString()
+      const isAvailable = !activeCashierIds.includes(cashierUserId)
+      console.log(`🔍 Cashier ${cashier.user.name} (${cashierUserId}): ${isAvailable ? 'AVAILABLE' : 'NOT AVAILABLE'} (activeCashierIds includes: ${activeCashierIds.includes(cashierUserId)})`)
+      return isAvailable
+    })
 
-    res.json({
-      allCashiers: cashiers,
+    console.log('🔍 Available cashiers:', availableCashiers.length, availableCashiers)
+    console.log('🔍 Available cashier details:', availableCashiers.map(c => ({
+      id: c._id,
+      name: c.user?.name,
+      email: c.user?.email,
+      employeeId: c.user?.employeeId,
+      department: c.employmentDetails?.department
+    })))
+
+    const responseData = {
+      allCashiers: cashierRoleEmployees,
       availableCashiers: availableCashiers,
       activeShiftCashiers: activeCashierIds.length
-    })
+    }
+
+    console.log('🔍 Sending response:', responseData)
+    res.json(responseData)
   } catch (error) {
+    console.error('❌ Error in available-cashiers endpoint:', error)
     res.status(500).json({ message: "Server error", error: error.message })
   }
 })
 
-// Admin: Assign temporary cashier for absent employee
-router.post("/assign-temporary", auth, async (req, res) => {
-  try {
-    if (req.user.role !== "admin") {
-      return res.status(403).json({ message: "Admin access required" })
-    }
-
-    const { absentCashierId, temporaryCashierId, reason } = req.body
-
-    if (!absentCashierId || !temporaryCashierId || !reason) {
-      return res.status(400).json({ message: "All fields are required" })
-    }
-
-    if (absentCashierId === temporaryCashierId) {
-      return res.status(400).json({ message: "Absent and temporary cashiers cannot be the same" })
-    }
-
-    // Check if absent cashier has an active shift
-    const absentShift = await Shift.findOne({
-      cashier: absentCashierId,
-      status: "active"
-    })
-
-    if (!absentShift) {
-      return res.status(400).json({ message: "Absent cashier does not have an active shift" })
-    }
-
-    // Check if temporary cashier already has an active shift
-    const temporaryActiveShift = await Shift.findOne({
-      cashier: temporaryCashierId,
-      status: "active"
-    })
-
-    if (temporaryActiveShift) {
-      return res.status(400).json({ message: "Temporary cashier already has an active shift" })
-    }
-
-    // End the absent cashier's shift
-    absentShift.status = "closed"
-    absentShift.endTime = new Date()
-    absentShift.notes = `Shift ended due to absence: ${reason} - Temporary replacement assigned by admin: ${req.user.name}`
-    await absentShift.save()
-
-    // Create new shift for temporary cashier
-    const temporaryShift = new Shift({
-      cashier: temporaryCashierId,
-      cashierName: (await Employee.findOne({ user: temporaryCashierId }).populate("user", "name")).user.name,
-      openingCash: absentShift.openingCash,
-      notes: `Temporary replacement for ${absentShift.cashierName} - Reason: ${reason} - Assigned by admin: ${req.user.name}`
-    })
-
-    await temporaryShift.save()
-
-    res.json({
-      message: "Temporary cashier assigned successfully",
-      absentShift: absentShift,
-      temporaryShift: temporaryShift
-    })
-  } catch (error) {
-    res.status(500).json({ message: "Server error", error: error.message })
-  }
-})
 
 module.exports = router

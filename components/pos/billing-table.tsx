@@ -136,12 +136,14 @@ export function BillingTable({ items, onUpdateItem, onRemoveItem }: BillingTable
                   )}
                 </TableCell>
                 <TableCell>
-                  <Badge variant="secondary">{item.product.taxRate}%</Badge>
+                  <div className="text-center">
+                    <Badge variant="secondary">{item.product.taxRate}%</Badge>
+                    <div className="text-xs text-muted-foreground mt-1">{formatCurrency(item.taxAmount)}</div>
+                  </div>
                 </TableCell>
                 <TableCell>
                   <div className="text-right">
-                    <div className="font-medium">{formatCurrency(item.amount)}</div>
-                    <div className="text-xs text-muted-foreground">Tax: {formatCurrency(item.taxAmount)}</div>
+                    <div className="font-medium">{formatCurrency(item.totalAmount)}</div>
                   </div>
                 </TableCell>
                 <TableCell>

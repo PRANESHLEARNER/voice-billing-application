@@ -2,28 +2,66 @@
 
 import { useState, useEffect } from "react"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { Package, AlertTriangle, TrendingDown, Warehouse } from "lucide-react"
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { AlertTriangle, TrendingDown, Package, Mail, Building2, MessageSquare } from "lucide-react"
 import { apiClient, type InventoryReport } from "@/lib/api"
 
+interface ExtendedInventoryReport extends Omit<InventoryReport, 'products'> {
+  products: InventoryProduct[]
+}
+
+interface InventoryProduct {
+  _id: string
+  name: string
+  code: string
+  category: string
+  stock: number
+  cost: number
+  price: number
+  unit: string
+  stockValue: number
+  displayName: string
+  displayCode: string
+  isVariant?: boolean
+  parentName?: string
+  size?: string
+}
+
 export function InventorySummary() {
-  const [inventoryData, setInventoryData] = useState<InventoryReport | null>(null)
+  const [inventoryData, setInventoryData] = useState<ExtendedInventoryReport | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
   const [showLowStock, setShowLowStock] = useState(false)
+  const [isSendingEmail, setIsSendingEmail] = useState(false)
+  const [emailMessage, setEmailMessage] = useState("")
 
   const loadInventoryData = async (lowStock = false) => {
     try {
       setIsLoading(true)
       setError("")
       const data = await apiClient.getInventoryReport({ lowStock })
-      setInventoryData(data)
+      // Cast the data to ExtendedInventoryReport since the backend returns products with stock/cost properties
+      setInventoryData(data as unknown as ExtendedInventoryReport)
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load inventory data")
     } finally {
       setIsLoading(false)
+    }
+  }
+
+  const sendLowStockEmail = async () => {
+    try {
+      setIsSendingEmail(true)
+      setEmailMessage("")
+      
+      const result = await apiClient.sendLowStockEmail()
+      setEmailMessage('✅ Low stock email sent successfully!')
+    } catch (err) {
+      setEmailMessage(`❌ Error sending email: ${err instanceof Error ? err.message : 'Unknown error'}`)
+    } finally {
+      setIsSendingEmail(false)
     }
   }
 
@@ -39,8 +77,8 @@ export function InventorySummary() {
   }
 
   const getStockStatus = (stock: number) => {
-    if (stock === 0) return { label: "Out of Stock", variant: "destructive" as const, icon: AlertTriangle }
-    if (stock < 10) return { label: "Low Stock", variant: "secondary" as const, icon: TrendingDown }
+    if (stock < 5) return { label: "Out of Stock", variant: "destructive" as const, icon: AlertTriangle }
+    if (stock < 20) return { label: "Low Stock", variant: "secondary" as const, icon: TrendingDown }
     return { label: "In Stock", variant: "default" as const, icon: Package }
   }
 
@@ -71,7 +109,7 @@ export function InventorySummary() {
                   <p className="text-2xl font-bold">{formatCurrency(inventoryData.summary.inventoryValue)}</p>
                 </div>
                 <div className="bg-green-100 p-3 rounded-full">
-                  <Warehouse className="h-6 w-6 text-green-600" />
+                  <Building2 className="h-6 w-6 text-green-600" />
                 </div>
               </div>
             </CardContent>
@@ -110,7 +148,7 @@ export function InventorySummary() {
       {/* Inventory Table */}
       <Card>
         <CardHeader>
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
             <div>
               <CardTitle className="flex items-center gap-2">
                 <Package className="h-5 w-5" />
@@ -120,10 +158,28 @@ export function InventorySummary() {
                 {showLowStock ? "Products with low stock levels" : "All active products"}
               </CardDescription>
             </div>
-            <Button variant={showLowStock ? "default" : "outline"} onClick={() => setShowLowStock(!showLowStock)}>
-              {showLowStock ? "Show All" : "Show Low Stock"}
-            </Button>
+            <div className="flex flex-col sm:flex-row gap-2">
+              <Button 
+                variant="outline" 
+                onClick={sendLowStockEmail} 
+                disabled={isSendingEmail || !inventoryData || inventoryData.summary.lowStockCount === 0}
+                className="flex items-center gap-2"
+              >
+                <Mail className="h-4 w-4" />
+                {isSendingEmail ? "Sending..." : "Send Low Stock Email"}
+              </Button>
+              <Button variant={showLowStock ? "default" : "outline"} onClick={() => setShowLowStock(!showLowStock)}>
+                {showLowStock ? "Show All" : "Show Low Stock"}
+              </Button>
+            </div>
           </div>
+          {emailMessage && (
+            <div className="space-y-1">
+              <div className="text-sm p-2 rounded bg-muted">
+                {emailMessage}
+              </div>
+            </div>
+          )}
         </CardHeader>
         <CardContent>
           {isLoading ? (

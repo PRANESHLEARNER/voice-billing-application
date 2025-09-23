@@ -12,11 +12,15 @@ import { ReportsDashboard } from "@/components/reports/reports-dashboard"
 import { EmployeeList } from "@/components/employees/employee-list"
 import { DiscountList } from "@/components/discounts/discount-list"
 import { SettingsManagement } from "@/components/settings/settings-management"
+import { ProfileView } from "@/components/profile/profile-view"
+import { Button } from "@/components/ui/button"
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
+import { useFullscreen } from "@/hooks/use-fullscreen"
 
 // Placeholder components for different tabs
-function BillingTab() {
+function BillingTab({ isFullscreen = false }: { isFullscreen?: boolean }) {
   return (
-    <div className="p-6">
+    <div className={isFullscreen ? "h-full w-full" : "p-6"}>
       <POSBilling />
     </div>
   )
@@ -79,14 +83,30 @@ function SettingsTab() {
   )
 }
 
+function ProfileTab() {
+  return (
+    <div className="p-6">
+      <ProfileView />
+    </div>
+  )
+}
+
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState("billing")
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
+  
+  const { 
+    isFullscreen, 
+    showExitConfirmation, 
+    toggleFullscreen, 
+    exitFullscreen, 
+    setShowExitConfirmation 
+  } = useFullscreen()
 
   const renderTabContent = () => {
     switch (activeTab) {
       case "billing":
-        return <BillingTab />
+        return <BillingTab isFullscreen={isFullscreen} />
       case "products":
         return <ProductsTab />
       case "bills":
@@ -101,6 +121,8 @@ export default function HomePage() {
         return <UsersTab />
       case "settings":
         return <SettingsTab />
+      case "profile":
+        return <ProfileTab />
       default:
         return <BillingTab />
     }
@@ -109,17 +131,44 @@ export default function HomePage() {
   return (
     <ProtectedRoute>
       <div className="min-h-screen bg-background">
-        <Header />
+        {/* Only show Header and Navigation when not in fullscreen */}
+        {!isFullscreen && <Header onTabChange={setActiveTab} />}
+        
         <div className="flex">
-          <Navigation 
-            activeTab={activeTab} 
-            onTabChange={setActiveTab} 
-            isSidebarOpen={isSidebarOpen} 
-            onSidebarToggle={setIsSidebarOpen} 
-          />
-          <main className="flex-1">{renderTabContent()}</main>
+          {/* Only show Navigation when not in fullscreen */}
+          {!isFullscreen && (
+            <Navigation 
+              activeTab={activeTab} 
+              onTabChange={setActiveTab} 
+              isSidebarOpen={isSidebarOpen} 
+              onSidebarToggle={setIsSidebarOpen} 
+            />
+          )}
+          
+          <main className={`flex-1 ${isFullscreen ? 'w-screen h-screen' : ''}`}>
+            
+            {renderTabContent()}
+          </main>
         </div>
       </div>
+      
+      {/* Fullscreen Exit Confirmation Dialog */}
+      <AlertDialog open={showExitConfirmation} onOpenChange={setShowExitConfirmation}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Exit Fullscreen Mode?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Are you sure you want to exit fullscreen mode? You can press F11 to toggle fullscreen again at any time.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={exitFullscreen}>
+              Exit Fullscreen
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </ProtectedRoute>
   )
 }

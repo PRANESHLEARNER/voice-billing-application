@@ -73,8 +73,8 @@ export function EmployeeList() {
     if (searchTerm) {
       filtered = filtered.filter(
         (employee) =>
-          employee.user.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
-          employee.user.employeeId.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (employee.user?.name?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
+          (employee.user?.employeeId?.toLowerCase().includes(searchTerm.toLowerCase()) || false) ||
           employee.personalDetails.firstName.toLowerCase().includes(searchTerm.toLowerCase()) ||
           employee.personalDetails.lastName.toLowerCase().includes(searchTerm.toLowerCase()) ||
           employee.contactDetails.phone.includes(searchTerm)
@@ -173,21 +173,21 @@ export function EmployeeList() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold">Employee Management</h1>
-          <p className="text-muted-foreground">Manage employees and their details</p>
+          <h1 className="text-3xl font-bold">Cashier Management</h1>
+          <p className="text-muted-foreground">Manage cashiers and their details</p>
         </div>
         {isAdmin && (
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={() => setEditingEmployee(null)}>
                 <Plus className="mr-2 h-4 w-4" />
-                Add Employee
+                Add Cashier
               </Button>
             </DialogTrigger>
             <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>
-                  {editingEmployee ? "Edit Employee" : "Add New Employee"}
+                  {editingEmployee ? "Edit Cashier" : "Add New Cashier"}
                 </DialogTitle>
               </DialogHeader>
               <EmployeeForm
@@ -240,7 +240,7 @@ export function EmployeeList() {
       {/* Employee Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Employees ({filteredEmployees.length})</CardTitle>
+          <CardTitle>Cashiers ({filteredEmployees.length})</CardTitle>
         </CardHeader>
         <CardContent>
           <Table>
@@ -258,11 +258,11 @@ export function EmployeeList() {
             <TableBody>
               {filteredEmployees.map((employee) => (
                 <TableRow key={employee._id}>
-                  <TableCell className="font-medium">{employee.user.employeeId}</TableCell>
+                  <TableCell className="font-medium">{employee.user?.employeeId || 'N/A'}</TableCell>
                   <TableCell>
                     <div>
-                      <div className="font-medium">{employee.user.name}</div>
-                      <div className="text-sm text-muted-foreground">{employee.user.email}</div>
+                      <div className="font-medium">{employee.user?.name || 'Unknown'}</div>
+                      <div className="text-sm text-muted-foreground">{employee.user?.email || 'No email'}</div>
                     </div>
                   </TableCell>
                   <TableCell>{employee.employmentDetails.department}</TableCell>
@@ -308,7 +308,7 @@ export function EmployeeList() {
           </Table>
           {filteredEmployees.length === 0 && (
             <div className="text-center py-8 text-muted-foreground">
-              No employees found matching your criteria
+              No cashiers found matching your criteria
             </div>
           )}
         </CardContent>
@@ -318,7 +318,7 @@ export function EmployeeList() {
       <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
         <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
           <DialogHeader>
-            <DialogTitle>Employee Details</DialogTitle>
+            <DialogTitle>Cashier Details</DialogTitle>
           </DialogHeader>
           {selectedEmployee && (
             <EmployeeDetails

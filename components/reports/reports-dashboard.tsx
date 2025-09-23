@@ -10,6 +10,8 @@ import { CalendarDays } from "lucide-react"
 import { SalesOverview } from "./sales-overview"
 import { TopProducts } from "./top-products"
 import { InventorySummary } from "./inventory-summary"
+import { SalesTrendsChart } from "./sales-trends-chart"
+import { CategoriesPerformanceChart } from "./categories-performance-chart"
 
 export function ReportsDashboard() {
   const [startDate, setStartDate] = useState("")
@@ -80,34 +82,19 @@ export function ReportsDashboard() {
 
         <TabsContent value="sales" className="space-y-6">
           <SalesOverview startDate={startDate} endDate={endDate} />
-
+          
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <div className="space-y-6">
+              <SalesTrendsChart startDate={startDate} endDate={endDate} />
+            </div>
             <TopProducts startDate={startDate} endDate={endDate} limit={10} />
-
-            <Card>
-              <CardHeader>
-                <CardTitle>Sales Trends</CardTitle>
-                <CardDescription>Daily sales performance over time</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <div className="text-center text-muted-foreground py-8">Sales chart visualization coming soon...</div>
-              </CardContent>
-            </Card>
           </div>
         </TabsContent>
 
         <TabsContent value="products" className="space-y-6">
           <TopProducts startDate={startDate} endDate={endDate} limit={20} />
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Product Categories Performance</CardTitle>
-              <CardDescription>Revenue breakdown by product categories</CardDescription>
-            </CardHeader>
-            <CardContent>
-              <div className="text-center text-muted-foreground py-8">Category performance chart coming soon...</div>
-            </CardContent>
-          </Card>
+          
+          <CategoriesPerformanceChart startDate={startDate} endDate={endDate} />
         </TabsContent>
 
         <TabsContent value="inventory" className="space-y-6">

@@ -14,7 +14,12 @@ import { Store, User, LogOut, Settings, Clock } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
 import { useState, useEffect } from "react"
 import Logo from "@/assets/image.png"
-export function Header() {
+import { ThemeToggle } from "@/components/ui/theme-toggle"
+interface HeaderProps {
+  onTabChange?: (tab: string) => void
+}
+
+export function Header({ onTabChange }: HeaderProps) {
   const { user, logout, isAdmin } = useAuth()
   const [currentTime, setCurrentTime] = useState(new Date())
 
@@ -86,14 +91,17 @@ export function Header() {
         </div>
 
         {/* User Info and Actions */}
-        <div className="flex items-center space-x-4">
+        <div className="flex items-center space-x-2">
+          {/* Theme Toggle */}
+          <ThemeToggle />
+          
           <div className="text-right">
             <p className="font-medium">{user.name}</p>
             <div className="flex items-center space-x-2">
               <Badge variant={isAdmin ? "secondary" : "outline"} className="text-white text-xs">
                 {user.role.toUpperCase()}
               </Badge>
-              <span className="text-xs text-primary-foreground/80">ID: {user.employeeId}</span>
+              <span className="text-xs text-white">ID: {user.employeeId}</span>
             </div>
           </div>
 
@@ -103,21 +111,17 @@ export function Header() {
       className="p-2 rounded-full hover:bg-primary-foreground/10 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-primary-foreground"
       aria-label="User Menu"
     >
-      <User className="h-5 w-5 text-primary-foreground" />
+      <User className="h-5 w-5 text-white" />
     </button>
   </DropdownMenuTrigger>
 
   <DropdownMenuContent align="end" className="w-56">
     <DropdownMenuLabel>My Account</DropdownMenuLabel>
     <DropdownMenuSeparator />
-    <DropdownMenuItem>
-      <User className="mr-2 h-4 w-4" />
-      Profile
-    </DropdownMenuItem>
-    {isAdmin && (
-      <DropdownMenuItem>
-        <Settings className="mr-2 h-4 w-4" />
-        Settings
+    {user.role !== 'cashier' && (
+      <DropdownMenuItem onClick={() => onTabChange?.("profile")}>
+        <User className="mr-2 h-4 w-4" />
+        Profile
       </DropdownMenuItem>
     )}
     <DropdownMenuSeparator />

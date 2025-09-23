@@ -9,8 +9,10 @@ import { Clock, DollarSign, FileText, Play, Square, Loader2 } from "lucide-react
 import { apiClient, type Shift } from "@/lib/api"
 import { StartShiftDialog } from "./start-shift-dialog"
 import { EndShiftDialog } from "./end-shift-dialog"
+import { useAuth } from "@/hooks/use-auth"
 
 export function ShiftStatus() {
+  const { isAdmin, isCashier } = useAuth()
   const [currentShift, setCurrentShift] = useState<Shift | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const [error, setError] = useState("")
@@ -97,7 +99,7 @@ export function ShiftStatus() {
               Shift Status
             </div>
             {currentShift ? (
-              <Badge variant="default" className="bg-green-600">
+              <Badge variant="default" className="bg-green-600 dark:bg-green-700">
                 Active Shift
               </Badge>
             ) : (
@@ -121,7 +123,7 @@ export function ShiftStatus() {
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">Total Sales</p>
-                  <p className="font-medium text-lg text-green-600">{formatCurrency(currentShift.totalSales)}</p>
+                  <p className="font-medium text-lg text-green-600 dark:text-green-400">{formatCurrency(currentShift.totalSales)}</p>
                 </div>
                 <div className="space-y-2">
                   <p className="text-sm text-muted-foreground">Bills Created</p>
@@ -149,11 +151,17 @@ export function ShiftStatus() {
             <div className="text-center py-8">
               <Clock className="h-12 w-12 mx-auto mb-4 text-muted-foreground" />
               <h3 className="text-lg font-medium mb-2">No Active Shift</h3>
-              <p className="text-muted-foreground mb-4">Start a new shift to begin processing sales</p>
-              <Button onClick={() => setShowStartDialog(true)}>
-                <Play className="mr-2 h-4 w-4" />
-                Start Shift
-              </Button>
+              <p className="text-muted-foreground mb-4">
+                {isAdmin 
+                  ? "Admin users cannot start shifts. Please ask a cashier to start a shift." 
+                  : "Start a new shift to begin processing sales"}
+              </p>
+              {!isAdmin && (
+                <Button onClick={() => setShowStartDialog(true)}>
+                  <Play className="mr-2 h-4 w-4" />
+                  Start Shift
+                </Button>
+              )}
             </div>
           )}
         </CardContent>
@@ -164,7 +172,7 @@ export function ShiftStatus() {
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <Card>
             <CardContent className="flex items-center p-6">
-              <DollarSign className="h-8 w-8 text-green-600 mr-3" />
+              <DollarSign className="h-8 w-8 text-green-600 dark:text-green-400 mr-3" />
               <div>
                 <p className="text-sm text-muted-foreground">Average Sale</p>
                 <p className="text-xl font-bold">
@@ -178,7 +186,7 @@ export function ShiftStatus() {
 
           <Card>
             <CardContent className="flex items-center p-6">
-              <FileText className="h-8 w-8 text-blue-600 mr-3" />
+              <FileText className="h-8 w-8 text-blue-600 dark:text-blue-400 mr-3" />
               <div>
                 <p className="text-sm text-muted-foreground">Sales per Hour</p>
                 <p className="text-xl font-bold">
@@ -193,7 +201,7 @@ export function ShiftStatus() {
 
           <Card>
             <CardContent className="flex items-center p-6">
-              <Clock className="h-8 w-8 text-purple-600 mr-3" />
+              <Clock className="h-8 w-8 text-purple-600 dark:text-purple-400 mr-3" />
               <div>
                 <p className="text-sm text-muted-foreground">Shift Duration</p>
                 <p className="text-xl font-bold">{formatDuration(currentShift.startTime)}</p>

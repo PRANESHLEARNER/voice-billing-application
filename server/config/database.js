@@ -7,6 +7,7 @@ const connectDB = async () => {
       process.env.MONGODB_URI || "mongodb+srv://deepan09112004:deepan@billing-software.9ovfewp.mongodb.net/"
     );
     console.log(`MongoDB Connected: ${conn.connection.host}`);
+    return conn; // Return the connection object
   } catch (error) {
     console.error("Database connection error:", error);
     process.exit(1);

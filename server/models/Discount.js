@@ -179,7 +179,7 @@ discountSchema.statics.findApplicableDiscounts = async function (product) {
   }
 }
 
-// Static method to find best discount for a product
+// Static method to find best discount for a product (takes product object)
 discountSchema.statics.findBestDiscount = async function (product, quantity = 1) {
   const applicableDiscounts = await this.findApplicableDiscounts(product)
   
@@ -202,6 +202,20 @@ discountSchema.statics.findBestDiscount = async function (product, quantity = 1)
   }
 
   return bestDiscount
+}
+
+// Static method to find best discount for a product by ID (takes product ID)
+discountSchema.statics.findBestDiscountForProduct = async function (productId, quantity = 1) {
+  const Product = require("./Product")
+  
+  // Find the product by ID
+  const product = await Product.findById(productId)
+  if (!product) {
+    return null
+  }
+  
+  // Use the existing findBestDiscount method
+  return await this.findBestDiscount(product, quantity)
 }
 
 // Static method to record discount usage

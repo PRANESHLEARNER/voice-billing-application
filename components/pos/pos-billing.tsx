@@ -133,7 +133,18 @@ export function POSBilling() {
 
   const grandTotal = billItems.reduce((total, item) => total + item.totalAmount, 0)
 
-  const handlePayment = async (paymentData: { cashTendered: number; paymentMethod: string }) => {
+  const handlePayment = async (paymentData: {
+    cashTendered?: number
+    paymentMethod: "cash" | "card" | "upi" | "mixed"
+    cardAmount?: number
+    upiAmount?: number
+    razorpayDetails?: {
+      paymentId: string
+      orderId: string
+      signature: string
+      method: "card" | "upi"
+    }
+  }) => {
     if (billItems.length === 0) {
       setError("No items in the bill")
       return
@@ -143,17 +154,102 @@ export function POSBilling() {
     setError("")
 
     try {
+      // Prepare payment details for the bill
+      let paymentDetails: any = {}
+      let paymentBreakdown: any[] = []
+      
+      if (paymentData.razorpayDetails) {
+        paymentDetails = {
+          razorpayPaymentId: paymentData.razorpayDetails.paymentId,
+          razorpayOrderId: paymentData.razorpayDetails.orderId,
+          razorpaySignature: paymentData.razorpayDetails.signature,
+          paymentStatus: "completed"
+        }
+        
+        if (paymentData.razorpayDetails.method === "card") {
+          paymentDetails.cardType = "Credit Card"
+        } else if (paymentData.razorpayDetails.method === "upi") {
+          paymentDetails.upiId = "customer@upi"
+        }
+      }
+      
+      // Build payment breakdown
+      if (paymentData.paymentMethod === "cash") {
+        paymentBreakdown.push({
+          method: "cash",
+          amount: paymentData.cashTendered || grandTotal
+        })
+      } else if (paymentData.paymentMethod === "card") {
+        paymentBreakdown.push({
+          method: "card",
+          amount: grandTotal,
+          details: paymentData.razorpayDetails ? {
+            razorpayPaymentId: paymentData.razorpayDetails.paymentId,
+            razorpayOrderId: paymentData.razorpayDetails.orderId,
+            razorpaySignature: paymentData.razorpayDetails.signature
+          } : undefined
+        })
+      } else if (paymentData.paymentMethod === "upi") {
+        paymentBreakdown.push({
+          method: "upi",
+          amount: grandTotal,
+          details: paymentData.razorpayDetails ? {
+            razorpayPaymentId: paymentData.razorpayDetails.paymentId,
+            razorpayOrderId: paymentData.razorpayDetails.orderId,
+            razorpaySignature: paymentData.razorpayDetails.signature
+          } : undefined
+        })
+      } else if (paymentData.paymentMethod === "mixed") {
+        if (paymentData.cashTendered && paymentData.cashTendered > 0) {
+          paymentBreakdown.push({
+            method: "cash",
+            amount: paymentData.cashTendered
+          })
+        }
+        if (paymentData.cardAmount && paymentData.cardAmount > 0) {
+          paymentBreakdown.push({
+            method: "card",
+            amount: paymentData.cardAmount,
+            details: paymentData.razorpayDetails?.method === "card" ? {
+              razorpayPaymentId: paymentData.razorpayDetails.paymentId,
+              razorpayOrderId: paymentData.razorpayDetails.orderId,
+              razorpaySignature: paymentData.razorpayDetails.signature
+            } : undefined
+          })
+        }
+        if (paymentData.upiAmount && paymentData.upiAmount > 0) {
+          paymentBreakdown.push({
+            method: "upi",
+            amount: paymentData.upiAmount,
+            details: paymentData.razorpayDetails?.method === "upi" ? {
+              razorpayPaymentId: paymentData.razorpayDetails.paymentId,
+              razorpayOrderId: paymentData.razorpayDetails.orderId,
+              razorpaySignature: paymentData.razorpayDetails.signature
+            } : undefined
+          })
+        }
+      }
+
       const billData = {
         items: billItems.map((item) => ({
           product: item.product._id,
-          variant: item.variant.sku,
+          size: item.variant.size,
           quantity: item.quantity,
           rate: item.rate,
           taxRate: item.product.taxRate,
+          discount: item.discount ? {
+            discountId: item.discount.discountId,
+            discountName: item.discount.discountName,
+            discountType: item.discount.discountType,
+            discountValue: item.discount.discountValue,
+            discountAmount: item.discount.discountAmount
+          } : undefined
         })),
         customer: customerInfo,
         cashTendered: paymentData.cashTendered,
-        paymentMethod: paymentData.paymentMethod as any,
+        paymentMethod: paymentData.paymentMethod,
+        paymentDetails: Object.keys(paymentDetails).length > 0 ? paymentDetails : undefined,
+        paymentBreakdown: paymentBreakdown.length > 0 ? paymentBreakdown : undefined,
       }
 
       const bill = await apiClient.createBill(billData)
@@ -167,77 +263,100 @@ export function POSBilling() {
   }
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <Card>
-        <CardHeader>
+    <div className="h-full bg-background overflow-hidden">
+      {/* Main Container Card */}
+      <Card className="h-full flex flex-col overflow-hidden">
+        {/* Header */}
+        {/* <CardHeader className="flex-shrink-0 border-b">
           <CardTitle className="flex items-center gap-2">
             <ShoppingCart className="h-5 w-5" />
             POS Billing System
           </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="flex flex-col lg:flex-row gap-4">
-            <div className="flex-1">
-              <ProductSearch onProductSelect={addProduct} />
+        </CardHeader> */}
+
+        <CardContent className="flex-1 p-0 flex flex-col lg:flex-row overflow-hidden">
+          {/* Left Side - Main Workspace */}
+          <div className="flex-1 flex flex-col p-6 space-y-6 min-w-0 overflow-hidden">
+            {/* Alerts */}
+            {error && (
+              <Alert variant="destructive" className="mb-4">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
+
+            {success && (
+              <Alert className="border-green-200 bg-green-50 text-green-800 mb-4">
+                <AlertDescription>{success}</AlertDescription>
+              </Alert>
+            )}
+
+            {/* Product Search with Action Buttons */}
+            <div className="flex-shrink-0">
+              <div className="flex gap-3">
+                <div className="flex-1">
+                  <ProductSearch onProductSelect={addProduct} />
+                </div>
+                <div className="flex gap-2">
+                  <Button variant="outline" onClick={clearBill} disabled={billItems.length === 0}>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Clear All
+                  </Button>
+                  <Button variant="outline" disabled={billItems.length === 0}>
+                    <FileText className="mr-2 h-4 w-4" />
+                    Hold Bill
+                  </Button>
+                </div>
+              </div>
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" onClick={clearBill} disabled={billItems.length === 0}>
-                <RefreshCw className="mr-2 h-4 w-4" />
-                Clear All
-              </Button>
-              <Button variant="outline" disabled={billItems.length === 0}>
-                <FileText className="mr-2 h-4 w-4" />
-                Hold Bill
-              </Button>
+
+            {/* Customer Information */}
+            <div className="flex-shrink-0">
+              <CustomerInfo customerInfo={customerInfo} onCustomerInfoChange={setCustomerInfo} />
+            </div>
+
+            {/* Items Billing Table - Scrollable */}
+            <div className="flex-1 min-h-0">
+              <Card className="h-full flex flex-col overflow-hidden">
+                <CardHeader className="flex-shrink-0 pb-3">
+                  <CardTitle className="text-lg">Items ({billItems.length})</CardTitle>
+                </CardHeader>
+                <CardContent className="flex-1 overflow-hidden p-0">
+                  <div className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-muted/20 hover:scrollbar-thumb-muted-foreground">
+                    <div className="p-4">
+                      <BillingTable items={billItems} onUpdateItem={updateItem} onRemoveItem={removeItem} />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+
+          {/* Right Side - Fixed Sidebar */}
+          <div className="w-full lg:w-80 flex-shrink-0 border-l bg-muted/50 flex flex-col">
+            {/* Fixed Top Section - Summary and Payment */}
+            <div className="flex-shrink-0 p-4 space-y-4 border-b">
+              {/* Billing Summary - Fixed */}
+              <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-foreground">Bill Summary</h3>
+                <BillingSummary items={billItems} />
+              </div>
+              
+              {/* Payment Section - Fixed */}
+              {billItems.length > 0 && (
+                <div className="space-y-2">
+                  {/* <h3 className="text-sm font-semibold text-gray-700">Payment</h3> */}
+                  <PaymentSection grandTotal={Math.round(grandTotal)} onPayment={handlePayment} isProcessing={isProcessing} />
+                </div>
+              )}
+            </div>
+            
+            {/* Scrollable Content Area (if needed in future) */}
+            <div className="flex-1 overflow-y-auto p-4">
+              {/* Additional content can go here if needed */}
             </div>
           </div>
         </CardContent>
       </Card>
-
-      {/* Alerts */}
-      {error && (
-        <Alert variant="destructive">
-          <AlertDescription>{error}</AlertDescription>
-        </Alert>
-      )}
-
-      {success && (
-        <Alert className="border-green-200 bg-green-50 text-green-800">
-          <AlertDescription>{success}</AlertDescription>
-        </Alert>
-      )}
-
-      {/* Main Billing Area */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 h-[calc(100vh-300px)]">
-        {/* Left Column - Customer Info and Summary */}
-        <div className="lg:col-span-1 space-y-6">
-          {/* Customer Information */}
-          <CustomerInfo customerInfo={customerInfo} onCustomerInfoChange={setCustomerInfo} />
-          
-          {/* Billing Summary */}
-          <BillingSummary items={billItems} />
-          
-          {/* Payment Section */}
-          {billItems.length > 0 && (
-            <PaymentSection grandTotal={Math.round(grandTotal)} onPayment={handlePayment} isProcessing={isProcessing} />
-          )}
-        </div>
-
-        {/* Right Column - Billing Table (Scrollable) */}
-        <div className="lg:col-span-2">
-          <Card className="h-full flex flex-col">
-            <CardHeader className="flex-shrink-0">
-              <CardTitle>Items ({billItems.length})</CardTitle>
-            </CardHeader>
-            <CardContent className="flex-1 overflow-hidden">
-              <div className="h-full overflow-y-auto">
-                <BillingTable items={billItems} onUpdateItem={updateItem} onRemoveItem={removeItem} />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
     </div>
   )
 }

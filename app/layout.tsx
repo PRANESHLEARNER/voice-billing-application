@@ -5,6 +5,7 @@ import { GeistMono } from "geist/font/mono"
 import { Analytics } from "@vercel/analytics/next"
 import { AuthProvider } from "@/hooks/use-auth"
 import { Suspense } from "react"
+import { ThemeScript } from "./theme-script"
 import "./globals.css"
 
 export const metadata: Metadata = {
@@ -19,10 +20,13 @@ export default function RootLayout({
   children: React.ReactNode
 }>) {
   return (
-    <html lang="en">
+    <html lang="en" suppressHydrationWarning>
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable}`}>
         <Suspense fallback={<div>Loading...</div>}>
-          <AuthProvider>{children}</AuthProvider>
+          <AuthProvider>
+            <ThemeScript />
+            {children}
+          </AuthProvider>
         </Suspense>
         <Analytics />
       </body>

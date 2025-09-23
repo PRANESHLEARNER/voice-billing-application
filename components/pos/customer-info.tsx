@@ -1,12 +1,8 @@
 "use client"
 
 import { useState } from "react"
-import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible"
-import { ChevronDown, ChevronUp, User } from "lucide-react"
+import { User, X } from "lucide-react"
 
 interface CustomerInfo {
   name?: string
@@ -21,87 +17,62 @@ interface CustomerInfoProps {
 }
 
 export function CustomerInfo({ customerInfo, onCustomerInfoChange }: CustomerInfoProps) {
-  const [isOpen, setIsOpen] = useState(false)
+  const [editValues, setEditValues] = useState(customerInfo)
 
   const handleInputChange = (field: keyof CustomerInfo, value: string) => {
-    onCustomerInfoChange({
-      ...customerInfo,
+    const newValues = {
+      ...editValues,
       [field]: value,
-    })
+    }
+    setEditValues(newValues)
+    onCustomerInfoChange(newValues)
   }
 
   const clearCustomerInfo = () => {
     onCustomerInfoChange({})
+    setEditValues({})
   }
 
+  // Check if any customer info exists
+  const hasCustomerInfo = Object.values(customerInfo).some(value => value && value.trim() !== "")
+
   return (
-    <Card className="w-100">
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
-        <CollapsibleTrigger asChild>
-          <CardHeader className="cursor-pointer hover:bg-muted/50 transition-colors">
-            <CardTitle className="flex items-center justify-between text-base">
-              <div className="flex items-center gap-2">
-                <User className="h-4 w-4" />
-                Customer Information
-                {(customerInfo.name || customerInfo.phone) && (
-                  <span className="text-sm font-normal text-muted-foreground">
-                    ({customerInfo.name || customerInfo.phone})
-                  </span>
-                )}
-              </div>
-              {isOpen ? <ChevronUp className="h-4 w-4" /> : <ChevronDown className="h-4 w-4" />}
-            </CardTitle>
-          </CardHeader>
-        </CollapsibleTrigger>
-        <CollapsibleContent>
-          <CardContent className="space-y-4"><br></br>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="customerName">Customer Name</Label>
-                <Input
-                  id="customerName"
-                  value={customerInfo.name || ""}
-                  onChange={(e) => handleInputChange("name", e.target.value)}
-                  placeholder="Enter customer name"
-                />
-              </div>
-              <div className="space-y-2">
-                <Label htmlFor="customerPhone">Phone Number</Label>
-                <Input
-                  id="customerPhone"
-                  value={customerInfo.phone || ""}
-                  onChange={(e) => handleInputChange("phone", e.target.value)}
-                  placeholder="Enter phone number"
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="customerAddress">Address</Label>
-              <Input
-                id="customerAddress"
-                value={customerInfo.address || ""}
-                onChange={(e) => handleInputChange("address", e.target.value)}
-                placeholder="Enter customer address"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="gstNumber">GST Number</Label>
-              <Input
-                id="gstNumber"
-                value={customerInfo.gstNumber || ""}
-                onChange={(e) => handleInputChange("gstNumber", e.target.value.toUpperCase())}
-                placeholder="Enter GST number"
-              />
-            </div>
-
-            <Button variant="outline" onClick={clearCustomerInfo} className="w-full bg-transparent">
-              Clear Customer Info
-            </Button>
-          </CardContent>
-        </CollapsibleContent>
-      </Collapsible>
-    </Card>
+    <div className="flex items-center gap-2 p-3 bg-card border rounded-lg shadow-sm">
+      <User className="h-4 w-4 text-muted-foreground flex-shrink-0" />
+      <div className="flex items-center gap-2 flex-wrap flex-1">
+        <Input
+          value={editValues.name || ""}
+          onChange={(e) => handleInputChange("name", e.target.value)}
+          placeholder="Customer Name"
+          className="h-10 text-base w-40"
+        />
+        <Input
+          value={editValues.phone || ""}
+          onChange={(e) => handleInputChange("phone", e.target.value)}
+          placeholder="Customer Phone"
+          className="h-10 text-base w-40"
+        />
+        <Input
+          value={editValues.address || ""}
+          onChange={(e) => handleInputChange("address", e.target.value)}
+          placeholder="Customer Address"
+          className="h-10 text-base w-48"
+        />
+        <Input
+          value={editValues.gstNumber || ""}
+          onChange={(e) => handleInputChange("gstNumber", e.target.value.toUpperCase())}
+          placeholder="Customer GST"
+          className="h-10 text-base w-36"
+        />
+      </div>
+      {hasCustomerInfo && (
+        <button
+          onClick={clearCustomerInfo}
+          className="flex-shrink-0 p-1 hover:bg-muted rounded transition-colors"
+        >
+          <X className="h-3 w-3 text-muted-foreground" />
+        </button>
+      )}
+    </div>
   )
 }

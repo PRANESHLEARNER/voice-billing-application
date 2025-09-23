@@ -45,6 +45,7 @@ const billItemSchema = new mongoose.Schema({
   },
 })
 
+
 const billSchema = new mongoose.Schema(
   {
     billNumber: {
@@ -92,6 +93,39 @@ const billSchema = new mongoose.Schema(
       enum: ["cash", "card", "upi", "mixed"],
       default: "cash",
     },
+    paymentDetails: {
+      razorpayPaymentId: String,
+      razorpayOrderId: String,
+      razorpaySignature: String,
+      cardLast4: String,
+      cardType: String,
+      upiId: String,
+      paymentStatus: {
+        type: String,
+        enum: ["pending", "completed", "failed", "refunded"],
+        default: "completed",
+      },
+    },
+    paymentBreakdown: [{
+      method: {
+        type: String,
+        enum: ["cash", "card", "upi"],
+        required: true,
+      },
+      amount: {
+        type: Number,
+        required: true,
+        min: 0,
+      },
+      details: {
+        razorpayPaymentId: String,
+        razorpayOrderId: String,
+        razorpaySignature: String,
+        cardLast4: String,
+        cardType: String,
+        upiId: String,
+      },
+    }],
     cashier: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
@@ -106,6 +140,10 @@ const billSchema = new mongoose.Schema(
       type: String,
       enum: ["completed", "cancelled", "refunded"],
       default: "completed",
+    },
+    notes: {
+      type: String,
+      default: "",
     },
   },
   {

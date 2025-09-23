@@ -1,27 +1,40 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Separator } from "@/components/ui/separator"
-import { CreditCard, Banknote, Smartphone, Loader2 } from "lucide-react"
+import { Banknote, Loader2, CreditCard, Smartphone } from "lucide-react"
+import { RazorpayPaymentDialog } from "@/components/pos/razorpay-payment-dialog"
 
 interface PaymentSectionProps {
   grandTotal: number
   onPayment: (paymentData: {
-    cashTendered: number
+    cashTendered?: number
     paymentMethod: "cash" | "card" | "upi" | "mixed"
+    cardAmount?: number
+    upiAmount?: number
+    razorpayDetails?: {
+      paymentId: string
+      orderId: string
+      signature: string
+      method: "card" | "upi"
+    }
   }) => Promise<void>
   isProcessing: boolean
 }
 
 export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentSectionProps) {
-  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "upi" | "mixed">("cash")
   const [cashTendered, setCashTendered] = useState("")
   const [error, setError] = useState("")
+  const [paymentMethod, setPaymentMethod] = useState<"cash" | "card" | "upi" | "mixed">("cash")
+  const [cardAmount, setCardAmount] = useState("")
+  const [upiAmount, setUpiAmount] = useState("")
+  const [isRazorpayDialogOpen, setIsRazorpayDialogOpen] = useState(false)
+  const [razorpayPaymentMethod, setRazorpayPaymentMethod] = useState<"card" | "upi">("card")
+  const [razorpayAmount, setRazorpayAmount] = useState(0)
+  const [paymentCompleted, setPaymentCompleted] = useState(false)
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -31,7 +44,88 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
   }
 
   const cashAmount = Number.parseFloat(cashTendered) || 0
+  const cardAmountNum = Number.parseFloat(cardAmount) || 0
+  const upiAmountNum = Number.parseFloat(upiAmount) || 0
   const changeDue = Math.max(0, cashAmount - grandTotal)
+  
+  const totalPaid = cashAmount + cardAmountNum + upiAmountNum
+  const remainingAmount = Math.max(0, grandTotal - totalPaid)
+
+  const handleOpenRazorpayDialog = (method: "card" | "upi", amount: number) => {
+    setRazorpayPaymentMethod(method)
+    setRazorpayAmount(amount)
+    setIsRazorpayDialogOpen(true)
+  }
+
+  const handleRazorpayPaymentSuccess = (paymentDetails: {
+    paymentId: string
+    orderId: string
+    signature: string
+    method: "card" | "upi"
+  }) => {
+    setIsRazorpayDialogOpen(false)
+    
+    if (paymentMethod === "mixed") {
+      // For mixed payments, update the respective amount
+      if (paymentDetails.method === "card") {
+        setCardAmount(razorpayAmount.toString())
+      } else {
+        setUpiAmount(razorpayAmount.toString())
+      }
+    } else {
+      // For single payment method, complete the payment automatically
+      handleAutomaticBillCompletion(paymentDetails)
+    }
+  }
+
+  const handleRazorpayPaymentError = (error: string) => {
+    setIsRazorpayDialogOpen(false)
+    setError(error)
+  }
+
+  const handleAutomaticBillCompletion = async (razorpayDetails?: {
+    paymentId: string
+    orderId: string
+    signature: string
+    method: "card" | "upi"
+  }) => {
+    try {
+      let paymentData: any = {
+        paymentMethod: razorpayDetails?.method || paymentMethod,
+      }
+
+      if (paymentMethod === "cash") {
+        paymentData.cashTendered = cashAmount
+      } else if (paymentMethod === "card") {
+        paymentData.cardAmount = grandTotal
+        paymentData.razorpayDetails = razorpayDetails
+      } else if (paymentMethod === "upi") {
+        paymentData.upiAmount = grandTotal
+        paymentData.razorpayDetails = razorpayDetails
+      } else if (paymentMethod === "mixed") {
+        paymentData.cashTendered = cashAmount
+        paymentData.cardAmount = cardAmountNum
+        paymentData.upiAmount = upiAmountNum
+        
+        // Find the Razorpay payment details
+        if (cardAmountNum > 0 && razorpayDetails?.method === "card") {
+          paymentData.razorpayDetails = razorpayDetails
+        } else if (upiAmountNum > 0 && razorpayDetails?.method === "upi") {
+          paymentData.razorpayDetails = razorpayDetails
+        }
+      }
+
+      await onPayment(paymentData)
+      setPaymentCompleted(true)
+      
+      // Reset payment breakdown
+      setCashTendered("")
+      setCardAmount("")
+      setUpiAmount("")
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Payment failed")
+    }
+  }
 
   const handlePayment = async () => {
     setError("")
@@ -41,11 +135,13 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
       return
     }
 
+    if (paymentMethod === "mixed" && totalPaid < grandTotal) {
+      setError("Total payment is less than the grand total")
+      return
+    }
+
     try {
-      await onPayment({
-        cashTendered: paymentMethod === "cash" ? cashAmount : grandTotal,
-        paymentMethod,
-      })
+      await handleAutomaticBillCompletion()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Payment failed")
     }
@@ -58,51 +154,63 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
     Math.ceil(grandTotal / 1000) * 1000,
   ].filter((amount, index, arr) => arr.indexOf(amount) === index && amount >= grandTotal)
 
+  // Reset payment completed state when payment method or grand total changes
+  useEffect(() => {
+    setPaymentCompleted(false)
+  }, [paymentMethod, grandTotal])
+
   return (
-    <Card className="w-100">
-      <CardHeader>
-        <CardTitle className="text-lg">Payment</CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-4">
-        <div className="space-y-2">
-          <Label>Payment Method</Label>
-          <Select value={paymentMethod} onValueChange={(value: any) => setPaymentMethod(value)}>
-            <SelectTrigger>
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="cash">
-                <div className="flex items-center gap-2">
-                  <Banknote className="h-4 w-4" />
-                  Cash
-                </div>
-              </SelectItem>
-              <SelectItem value="card">
-                <div className="flex items-center gap-2">
-                  <CreditCard className="h-4 w-4" />
-                  Card
-                </div>
-              </SelectItem>
-              <SelectItem value="upi">
-                <div className="flex items-center gap-2">
-                  <Smartphone className="h-4 w-4" />
-                  UPI
-                </div>
-              </SelectItem>
-              <SelectItem value="mixed">Mixed Payment</SelectItem>
-            </SelectContent>
-          </Select>
+    <>
+      <div className="space-y-3">
+        <h3 className="text-sm font-semibold text-foreground">Payment</h3>
+        {/* Payment Method Selection */}
+        <div className="flex gap-0.5 mt-2 overflow-hidden">
+          <Button
+            variant={paymentMethod === "cash" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setPaymentMethod("cash")}
+            className="flex items-center gap-0.5 flex-shrink-0 px-2 py-1 text-xs h-7"
+          >
+            <Banknote className="h-3 w-3" />
+            Cash
+          </Button>
+          <Button
+            variant={paymentMethod === "card" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setPaymentMethod("card")}
+            className="flex items-center gap-0.5 flex-shrink-0 px-2 py-1 text-xs h-7"
+          >
+            <CreditCard className="h-3 w-3" />
+            Card
+          </Button>
+          <Button
+            variant={paymentMethod === "upi" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setPaymentMethod("upi")}
+            className="flex items-center gap-0.5 flex-shrink-0 px-2 py-1 text-xs h-7"
+          >
+            <Smartphone className="h-3 w-3" />
+            UPI
+          </Button>
+          <Button
+            variant={paymentMethod === "mixed" ? "default" : "outline"}
+            size="sm"
+            onClick={() => setPaymentMethod("mixed")}
+            className="flex items-center gap-0.5 flex-shrink-0 px-2 py-1 text-xs h-7"
+          >
+            <Banknote className="h-3 w-3" />
+            Mixed
+          </Button>
         </div>
+          <div className="flex justify-between text-sm font-bold">
+            <span>Total Amount:</span>
+            <span className="text-primary">{formatCurrency(grandTotal)}</span>
+          </div>
 
-        <div className="flex justify-between text-lg font-bold">
-          <span>Total Amount:</span>
-          <span className="text-primary">{formatCurrency(grandTotal)}</span>
-        </div>
-
-        {paymentMethod === "cash" && (
-          <>
-            <div className="space-y-2">
-              <Label htmlFor="cashTendered">Cash Tendered</Label>
+          {/* Cash Payment Section */}
+          {(paymentMethod === "cash" || paymentMethod === "mixed") && (
+            <div className="space-y-1">
+              <Label htmlFor="cashTendered" className="text-xs">Cash Tendered</Label>
               <Input
                 id="cashTendered"
                 type="number"
@@ -111,61 +219,178 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
                 value={cashTendered}
                 onChange={(e) => setCashTendered(e.target.value)}
                 placeholder="0.00"
-                className="text-lg"
+                className="text-sm"
               />
             </div>
+          )}
 
-            {/* Quick Cash Buttons */}
-            <div className="grid grid-cols-2 gap-2">
+          {/* Card Payment Section */}
+          {paymentMethod === "mixed" && (
+            <Button
+              onClick={() => handleOpenRazorpayDialog("card", remainingAmount)}
+              disabled={isProcessing || remainingAmount <= 0}
+              className="w-full h-8 text-sm"
+              size="sm"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                `Pay Card - ${formatCurrency(remainingAmount)}`
+              )}
+            </Button>
+          )}
+          
+          {paymentMethod === "card" && (
+            <Button
+              onClick={() => handleOpenRazorpayDialog("card", grandTotal)}
+              disabled={isProcessing}
+              className="w-full h-8 text-sm"
+              size="sm"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                `Pay ${formatCurrency(grandTotal)}`
+              )}
+            </Button>
+          )}
+
+          {/* UPI Payment Section */}
+          {paymentMethod === "mixed" && (
+            <Button
+              onClick={() => handleOpenRazorpayDialog("upi", remainingAmount)}
+              disabled={isProcessing || remainingAmount <= 0}
+              className="w-full h-8 text-sm"
+              size="sm"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                `Pay UPI - ${formatCurrency(remainingAmount)}`
+              )}
+            </Button>
+          )}
+          
+          {paymentMethod === "upi" && (
+            <Button
+              onClick={() => handleOpenRazorpayDialog("upi", grandTotal)}
+              disabled={isProcessing}
+              className="w-full h-8 text-sm"
+              size="sm"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                `Pay ${formatCurrency(grandTotal)}`
+              )}
+            </Button>
+          )}
+
+          {/* Quick Cash Buttons - Only show for cash or mixed payments */}
+          {(paymentMethod === "cash" || paymentMethod === "mixed") && (
+            <div className="grid grid-cols-2 gap-1">
               {quickCashAmounts.slice(0, 4).map((amount) => (
                 <Button
                   key={amount}
                   variant="outline"
                   size="sm"
                   onClick={() => setCashTendered(amount.toString())}
-                  className="text-xs"
+                  className="text-xs h-7"
                 >
                   {formatCurrency(amount)}
                 </Button>
               ))}
             </div>
+          )}
 
-            {cashAmount > 0 && (
-              <>
-                <Separator />
-                <div className="space-y-2">
-                  <div className="flex justify-between">
+          {/* Payment Breakdown */}
+          {(cashAmount > 0 || cardAmountNum > 0 || upiAmountNum > 0) && (
+            <>
+              <Separator />
+              <div className="space-y-1">
+                {cashAmount > 0 && (
+                  <div className="flex justify-between text-xs">
                     <span>Cash Tendered:</span>
                     <span className="font-medium">{formatCurrency(cashAmount)}</span>
                   </div>
-                  <div className="flex justify-between">
+                )}
+                {cardAmountNum > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span>Card Amount:</span>
+                    <span className="font-medium">{formatCurrency(cardAmountNum)}</span>
+                  </div>
+                )}
+                {upiAmountNum > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span>UPI Amount:</span>
+                    <span className="font-medium">{formatCurrency(upiAmountNum)}</span>
+                  </div>
+                )}
+                <div className="flex justify-between font-bold text-xs">
+                  <span>Total Paid:</span>
+                  <span className="text-primary">{formatCurrency(totalPaid)}</span>
+                </div>
+                {paymentMethod === "cash" && cashAmount > 0 && (
+                  <div className="flex justify-between text-xs">
                     <span>Change Due:</span>
                     <span className="font-medium text-green-600">{formatCurrency(changeDue)}</span>
                   </div>
-                </div>
-              </>
-            )}
-          </>
-        )}
-
-        {error && <div className="text-sm text-destructive">{error}</div>}
-
-        <Button
-          onClick={handlePayment}
-          disabled={isProcessing || (paymentMethod === "cash" && cashAmount < grandTotal)}
-          className="w-full"
-          size="lg"
-        >
-          {isProcessing ? (
-            <>
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Processing...
+                )}
+                {paymentMethod === "mixed" && remainingAmount > 0 && (
+                  <div className="flex justify-between text-xs">
+                    <span>Remaining:</span>
+                    <span className="font-medium text-orange-600">{formatCurrency(remainingAmount)}</span>
+                  </div>
+                )}
+              </div>
             </>
-          ) : (
-            `Complete Sale - ${formatCurrency(grandTotal)}`
           )}
-        </Button>
-      </CardContent>
-    </Card>
+
+          {error && <div className="text-sm text-destructive">{error}</div>}
+
+          {/* Complete Sale Button - Only show for cash or mixed payments */}
+          {(paymentMethod === "cash" || paymentMethod === "mixed") && (
+            <Button
+              onClick={handlePayment}
+              disabled={isProcessing || 
+                (paymentMethod === "cash" && cashAmount < grandTotal) ||
+                (paymentMethod === "mixed" && totalPaid < grandTotal)}
+              className="w-full h-8 text-sm"
+              size="sm"
+            >
+              {isProcessing ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Processing...
+                </>
+              ) : (
+                `Complete Sale - ${formatCurrency(grandTotal)}`
+              )}
+            </Button>
+          )}
+      </div>
+
+      {/* Razorpay Payment Dialog */}
+      <RazorpayPaymentDialog
+        isOpen={isRazorpayDialogOpen}
+        onClose={() => setIsRazorpayDialogOpen(false)}
+        amount={razorpayAmount}
+        paymentMethod={razorpayPaymentMethod}
+        onSuccess={handleRazorpayPaymentSuccess}
+        onError={handleRazorpayPaymentError}
+      />
+    </>
   )
 }

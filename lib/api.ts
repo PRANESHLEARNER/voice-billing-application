@@ -1,4 +1,5 @@
 import { authService } from "./auth"
+import type { Employee } from "@/types/employee"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api"
 
@@ -6,6 +7,14 @@ class ApiClient {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const token = authService.getToken()
     const url = `${API_BASE_URL}${endpoint}`
+
+    console.log('🌐 API Request:', {
+      url,
+      method: options.method || "GET",
+      body: options.body,
+      hasToken: !!token,
+      tokenPreview: token ? token.substring(0, 20) + '...' : 'none'
+    })
 
     const config: RequestInit = {
       headers: {
@@ -16,13 +25,6 @@ class ApiClient {
       ...options,
     }
 
-    console.log("🌐 API Request:", {
-      url,
-      method: options.method || "GET",
-      body: options.body,
-      hasToken: !!token
-    })
-
     const response = await fetch(url, config)
 
     if (!response.ok) {
@@ -30,7 +32,9 @@ class ApiClient {
       console.error("❌ API Error:", {
         status: response.status,
         statusText: response.statusText,
-        error
+        error,
+        url,
+        hasToken: !!token
       })
       throw new Error(error.message || `HTTP ${response.status}`)
     }
@@ -80,18 +84,43 @@ class ApiClient {
   // Bill API methods
   // -------------------
   async createBill(billData: CreateBillRequest) {
-    // compute subtotal, totalDiscount, totalTax, grandTotal
-    const subtotal = billData.items.reduce(
-      (sum, item) => sum + item.rate * item.quantity,
-      0
-    )
-
-    const totalTax = billData.items.reduce(
-      (sum, item) => sum + item.taxRate * item.rate * item.quantity * 0.01,
-      0
-    )
-
-    const grandTotal = subtotal + totalTax
+    // Use the frontend's calculated totals to ensure discounts are properly applied
+    const calculatedTotals = billData.items.reduce((acc, item) => {
+      const baseAmount = item.rate * item.quantity
+      let discountAmount = 0
+      
+      // Use the pre-calculated discountAmount if available, otherwise calculate it
+      if (item.discount) {
+        if (item.discount.discountAmount !== undefined) {
+          // Use the pre-calculated discount amount from the frontend
+          discountAmount = item.discount.discountAmount
+        } else {
+          // Fallback: Calculate discount if discountAmount is not provided
+          if (item.discount.discountType === 'percentage') {
+            discountAmount = baseAmount * (item.discount.discountValue / 100)
+          } else {
+            // Fixed amount discount
+            discountAmount = Math.min(item.discount.discountValue * item.quantity, baseAmount)
+          }
+        }
+      }
+      
+      const discountedAmount = baseAmount - discountAmount
+      const taxAmount = discountedAmount * (item.taxRate / 100)
+      const totalAmount = discountedAmount + taxAmount
+      
+      return {
+        subtotal: acc.subtotal + discountedAmount,
+        totalDiscount: acc.totalDiscount + discountAmount,
+        totalTax: acc.totalTax + taxAmount,
+        grandTotal: acc.grandTotal + totalAmount
+      }
+    }, {
+      subtotal: 0,
+      totalDiscount: 0,
+      totalTax: 0,
+      grandTotal: 0
+    })
 
     // include cashier from auth
     const tokenUser = authService.getUser()
@@ -100,10 +129,11 @@ class ApiClient {
     const enrichedData = {
       ...billData,
       cashier: tokenUser.id,
-      subtotal,
-      totalTax,
-      grandTotal,
-      cashTendered: billData.cashTendered || grandTotal,
+      subtotal: calculatedTotals.subtotal,
+      totalDiscount: calculatedTotals.totalDiscount,
+      totalTax: calculatedTotals.totalTax,
+      grandTotal: calculatedTotals.grandTotal,
+      cashTendered: billData.cashTendered || calculatedTotals.grandTotal,
     }
 
     return this.request<Bill>("/bills", {
@@ -136,6 +166,13 @@ class ApiClient {
   async getBill(id: string) {
     return this.request<Bill>(`/bills/${id}`)
   }
+
+  async deleteBill(id: string) {
+    return this.request<{ message: string }>(`/bills/${id}`, {
+      method: "DELETE",
+    })
+  }
+
 
   // -------------------
   // Shift API methods
@@ -193,6 +230,57 @@ class ApiClient {
   // Admin: Get available cashiers
   async getAvailableCashiers() {
     return this.request<any>("/shifts/available-cashiers")
+  }
+
+  // -------------------
+  // Employee API methods
+  // -------------------
+  async getEmployees(params?: {
+    page?: number
+    limit?: number
+    search?: string
+    department?: string
+    status?: string
+    sortBy?: string
+    sortOrder?: string
+  }) {
+    const searchParams = new URLSearchParams()
+    if (params?.page) searchParams.append("page", params.page.toString())
+    if (params?.limit) searchParams.append("limit", params.limit.toString())
+    if (params?.search) searchParams.append("search", params.search)
+    if (params?.department) searchParams.append("department", params.department)
+    if (params?.status) searchParams.append("status", params.status)
+    if (params?.sortBy) searchParams.append("sortBy", params.sortBy)
+    if (params?.sortOrder) searchParams.append("sortOrder", params.sortOrder)
+
+    const response = await this.request<EmployeesResponse>(
+      `/employees?${searchParams.toString()}`
+    )
+    return response
+  }
+
+  async getEmployee(id: string) {
+    return await this.request<Employee>(`/employees/${id}`)
+  }
+
+  async createEmployee(employee: Omit<Employee, "_id" | "createdAt" | "updatedAt">) {
+    return await this.request<Employee>(`/employees`, {
+      method: "POST",
+      body: JSON.stringify(employee),
+    })
+  }
+
+  async updateEmployee(id: string, employee: Partial<Employee>) {
+    return await this.request<Employee>(`/employees/${id}`, {
+      method: "PUT",
+      body: JSON.stringify(employee),
+    })
+  }
+
+  async deleteEmployee(id: string) {
+    return await this.request<{ message: string }>(`/employees/${id}`, {
+      method: "DELETE",
+    })
   }
 
   // -------------------
@@ -286,6 +374,20 @@ class ApiClient {
     return this.request<PaymentMethodReport[]>(`/reports/payment-methods${query ? `?${query}` : ""}`)
   }
 
+  async getCategoriesPerformance(params?: { startDate?: string; endDate?: string }) {
+    const searchParams = new URLSearchParams()
+    if (params?.startDate) searchParams.append("startDate", params.startDate)
+    if (params?.endDate) searchParams.append("endDate", params.endDate)
+    const query = searchParams.toString()
+    return this.request<CategoryPerformance[]>(`/reports/categories-performance${query ? `?${query}` : ""}`)
+  }
+
+  async sendLowStockEmail() {
+    return this.request<{ message: string; count: number; products: Array<{ id: string; name: string; code: string; stock: number }> }>(`/reports/send-low-stock-email`, {
+      method: "POST"
+    })
+  }
+
   // -------------------
   // Discount API methods
   // -------------------
@@ -363,11 +465,76 @@ class ApiClient {
       method: "PATCH",
     })
   }
+
+  // -------------------
+  // Payment API methods
+  // -------------------
+  async createPaymentOrder(data: {
+    amount: number
+    currency: string
+    paymentMethod: "card" | "upi"
+  }) {
+    const response = await this.request<{
+      success: boolean
+      message: string
+      data: {
+        id: string
+        amount: number
+        currency: string
+      }
+    }>("/payments/create-order", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+    
+    // Extract the order data from the response
+    return response.data
+  }
+
+  async verifyPayment(data: {
+    paymentId: string
+    orderId: string
+    signature: string
+  }) {
+    return this.request<{
+      success: boolean
+      message: string
+      paymentId?: string
+      orderId?: string
+    }>("/payments/verify", {
+      method: "POST",
+      body: JSON.stringify(data),
+    })
+  }
+
+  // -------------------
+  // Generic API methods
+  // -------------------
+  async get<T = any>(endpoint: string) {
+    return await this.request<T>(endpoint)
+  }
+
+  async put<T = any>(endpoint: string, data: any) {
+    return await this.request<T>(endpoint, {
+      method: "PUT",
+      body: JSON.stringify(data),
+    })
+  }
+
+  // -------------------
+  // Type definitions
+  // -------------------
 }
 
-// -------------------
-// Type definitions
-// -------------------
+export interface EmployeesResponse {
+  employees: Employee[]
+  pagination: {
+    page: number
+    limit: number
+    total: number
+    pages: number
+  }
+}
 
 export interface ProductVariant {
   _id?: string
@@ -400,6 +567,7 @@ export interface BillItem {
   product: string
   productCode: string
   productName: string
+  size?: string
   quantity: number
   rate: number
   taxRate: number
@@ -428,6 +596,27 @@ export interface Bill {
   cashTendered: number
   changeDue: number
   paymentMethod: "cash" | "card" | "upi" | "mixed"
+  paymentDetails?: {
+    razorpayPaymentId?: string
+    razorpayOrderId?: string
+    razorpaySignature?: string
+    cardLast4?: string
+    cardType?: string
+    upiId?: string
+    paymentStatus?: "pending" | "completed" | "failed" | "refunded"
+  }
+  paymentBreakdown?: Array<{
+    method: "cash" | "card" | "upi"
+    amount: number
+    details?: {
+      razorpayPaymentId?: string
+      razorpayOrderId?: string
+      razorpaySignature?: string
+      cardLast4?: string
+      cardType?: string
+      upiId?: string
+    }
+  }>
   cashier: string
   cashierName: string
   shift?: string
@@ -439,9 +628,17 @@ export interface Bill {
 export interface CreateBillRequest {
   items: Array<{
     product: string
+    size?: string
     quantity: number
     rate: number
     taxRate: number
+    discount?: {
+      discountId: string
+      discountName: string
+      discountType: "percentage" | "fixed"
+      discountValue: number
+      discountAmount?: number
+    }
   }>
   customer?: {
     name?: string
@@ -451,6 +648,27 @@ export interface CreateBillRequest {
   }
   cashTendered?: number
   paymentMethod?: "cash" | "card" | "upi" | "mixed"
+  paymentDetails?: {
+    razorpayPaymentId?: string
+    razorpayOrderId?: string
+    razorpaySignature?: string
+    cardLast4?: string
+    cardType?: string
+    upiId?: string
+    paymentStatus?: "pending" | "completed" | "failed" | "refunded"
+  }
+  paymentBreakdown?: Array<{
+    method: "cash" | "card" | "upi"
+    amount: number
+    details?: {
+      razorpayPaymentId?: string
+      razorpayOrderId?: string
+      razorpaySignature?: string
+      cardLast4?: string
+      cardType?: string
+      upiId?: string
+    }
+  }>
 }
 
 export interface BillsResponse {
@@ -542,6 +760,15 @@ export interface PaymentMethodReport {
   totalAmount: number
   totalTransactions: number
   avgTransactionValue: number
+}
+
+export interface CategoryPerformance {
+  category: string
+  totalRevenue: number
+  totalQuantity: number
+  totalOrders: number
+  avgOrderValue: number
+  uniqueProductsCount: number
 }
 
 export interface Discount {

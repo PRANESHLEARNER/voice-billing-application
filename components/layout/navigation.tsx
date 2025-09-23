@@ -26,7 +26,7 @@ export function Navigation({ activeTab, onTabChange, isSidebarOpen, onSidebarTog
     { id: "shifts", label: "Shifts", icon: Clock, roles: ["admin", "cashier"] },
     { id: "reports", label: "Reports", icon: BarChart3, roles: ["admin"] },
     { id: "discounts", label: "Discounts", icon: Tag, roles: ["admin"] },
-    { id: "users", label: "Users", icon: Users, roles: ["admin"] },
+    { id: "users", label: "Cashiers", icon: Users, roles: ["admin"] },
     { id: "settings", label: "Settings", icon: Settings, roles: ["admin"] },
   ]
 
