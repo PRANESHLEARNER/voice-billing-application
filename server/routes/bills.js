@@ -5,6 +5,7 @@ const Shift = require("../models/Shift");
 const Discount = require("../models/Discount");
 const { auth } = require("../middleware/auth");
 const { checkProductStock } = require("../services/stockMonitor");
+const { sendBillByEmail } = require("../services/emailService");
 
 const router = express.Router();
 
@@ -332,5 +333,145 @@ router.delete("/:id", auth, async (req, res) => {
   }
 });
 
+
+/**
+ * POST /api/bills/:id/send-email
+ * Send bill via email
+ */
+router.post("/:id/send-email", auth, async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({ message: "Email address is required" });
+    }
+    
+    // Validate email format
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.status(400).json({ message: "Invalid email format" });
+    }
+    
+    const bill = await Bill.findById(req.params.id).populate("items.product");
+    
+    if (!bill) {
+      return res.status(404).json({ message: "Bill not found" });
+    }
+    
+    // Transform the bill items to map variantSize to size for email compatibility
+    const transformedBill = {
+      ...bill.toObject(),
+      items: bill.items.map(item => ({
+        ...item.toObject(),
+        size: item.variantSize  // Map variantSize to size for email template
+      }))
+    };
+    
+    // Send the bill via email
+    await sendBillByEmail(transformedBill, email);
+    
+    res.json({ message: "Bill sent successfully via email" });
+  } catch (error) {
+    console.error("Error sending bill via email:", error);
+    res.status(500).json({ 
+      message: "Failed to send bill via email", 
+      error: error.message 
+    });
+  }
+});
+
+
+/**
+ * GET /api/bills/:id/pdf
+ * Generate and download PDF for a specific bill
+ */
+router.get("/:id/pdf", auth, async (req, res) => {
+  try {
+    const bill = await Bill.findById(req.params.id).populate("items.product");
+    
+    if (!bill) {
+      return res.status(404).json({ message: "Bill not found" });
+    }
+    
+    // Import the PDF service
+    const { generateBillPDF } = require("../services/pdfService");
+    
+    // Transform the bill items to map variantSize to size for PDF compatibility
+    const transformedBill = {
+      ...bill.toObject(),
+      items: bill.items.map(item => ({
+        ...item.toObject(),
+        size: item.variantSize  // Map variantSize to size for PDF template
+      }))
+    };
+    
+    // Generate PDF
+    const pdfBuffer = await generateBillPDF(transformedBill);
+    
+    // Set response headers for PDF download
+    res.setHeader('Content-Type', 'application/pdf');
+    res.setHeader('Content-Disposition', `attachment; filename="bill_${bill.billNumber}.pdf"`);
+    res.setHeader('Content-Length', pdfBuffer.length);
+    
+    // Send the PDF buffer
+    res.send(pdfBuffer);
+    
+  } catch (error) {
+    console.error("Error generating PDF:", error);
+    res.status(500).json({ 
+      message: "Failed to generate PDF", 
+      error: error.message 
+    });
+  }
+});
+
+
+/**
+ * POST /api/bills/:id/whatsapp
+ * Send bill via WhatsApp
+ */
+router.post("/:id/whatsapp", auth, async (req, res) => {
+  try {
+    const { phoneNumber } = req.body;
+    
+    if (!phoneNumber) {
+      return res.status(400).json({ message: "Phone number is required" });
+    }
+    
+    const bill = await Bill.findById(req.params.id).populate("items.product");
+    
+    if (!bill) {
+      return res.status(404).json({ message: "Bill not found" });
+    }
+    
+    // Transform the bill items to map variantSize to size for WhatsApp compatibility
+    const transformedBill = {
+      ...bill.toObject(),
+      items: bill.items.map(item => ({
+        ...item.toObject(),
+        size: item.variantSize  // Map variantSize to size for message template
+      }))
+    };
+    
+    // Send bill via WhatsApp
+    const { sendBillViaWhatsApp } = require("../services/whatsappService");
+    const result = await sendBillViaWhatsApp(transformedBill, phoneNumber);
+    
+    res.json({
+      success: true,
+      message: "Bill prepared for WhatsApp sending",
+      whatsappUrl: result.whatsappUrl,
+      phoneNumber: result.phoneNumber,
+      billNumber: bill.billNumber
+    });
+    
+  } catch (error) {
+    console.error("Error sending bill via WhatsApp:", error);
+    res.status(500).json({ 
+      message: "Failed to send bill via WhatsApp", 
+      error: error.message 
+    });
+  }
+});
 
 module.exports = router;

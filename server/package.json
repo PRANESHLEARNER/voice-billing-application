@@ -20,6 +20,7 @@
     "node-fetch": "^3.3.2",
     "nodemailer": "^6.9.7",
     "pdfkit": "^0.17.2",
+    "puppeteer": "^21.0.0",
     "razorpay": "^2.9.6"
   },
   "devDependencies": {

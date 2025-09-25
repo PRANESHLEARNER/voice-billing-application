@@ -4,18 +4,19 @@ import { useState, useCallback } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ShoppingCart, RefreshCw, FileText } from "lucide-react"
+import { ShoppingCart, RefreshCw, FileText, Wallet, MessageSquare } from "lucide-react"
 import { ProductSearch } from "./product-search"
 import { BillingTable, type BillItem } from "./billing-table"
 import { BillingSummary } from "./billing-summary"
 import { PaymentSection } from "./payment-section"
 import { CustomerInfo } from "./customer-info"
-import { apiClient, type Product, type ProductVariant } from "@/lib/api"
+import { apiClient, type Product, type ProductVariant, type CustomerInfo as CustomerInfoType } from "@/lib/api"
 
 export function POSBilling() {
   const [billItems, setBillItems] = useState<BillItem[]>([])
-  const [customerInfo, setCustomerInfo] = useState({})
+  const [customerInfo, setCustomerInfo] = useState<CustomerInfoType>({ name: '', phone: '' })
   const [isProcessing, setIsProcessing] = useState(false)
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
 
@@ -126,7 +127,7 @@ export function POSBilling() {
 
   const clearBill = () => {
     setBillItems([])
-    setCustomerInfo({})
+    setCustomerInfo({ name: '', phone: '' })
     setError("")
     setSuccess("")
   }
@@ -253,12 +254,81 @@ export function POSBilling() {
       }
 
       const bill = await apiClient.createBill(billData)
-      setSuccess(`Bill ${bill.billNumber} created successfully!`)
+      
+      // Send bill via email if customer email is provided
+      if (customerInfo.email && customerInfo.email.trim() !== '') {
+        try {
+          await apiClient.sendBillByEmail(bill._id, customerInfo.email)
+          setSuccess(`Bill ${bill.billNumber} created successfully and sent via email to ${customerInfo.email}!`)
+        } catch (emailError) {
+          console.error('Failed to send email:', emailError)
+          // Still show success for bill creation, but note email failure
+          setSuccess(`Bill ${bill.billNumber} created successfully! (Email delivery failed)`)
+        }
+      } else {
+        setSuccess(`Bill ${bill.billNumber} created successfully!`)
+      }
+      
       clearBill()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create bill")
     } finally {
       setIsProcessing(false)
+    }
+  }
+
+  const handleSendWhatsApp = async () => {
+    if (billItems.length === 0) {
+      setError("No items in the bill")
+      return
+    }
+
+    if (!customerInfo.phone || customerInfo.phone.trim() === '') {
+      setError("Customer phone number is required for WhatsApp")
+      return
+    }
+
+    setIsSendingWhatsApp(true)
+    setError("")
+
+    try {
+      // First create the bill
+      const billData = {
+        items: billItems.map((item) => ({
+          product: item.product._id,
+          size: item.variant.size,
+          quantity: item.quantity,
+          rate: item.rate,
+          taxRate: item.product.taxRate,
+          discount: item.discount ? {
+            discountId: item.discount.discountId,
+            discountName: item.discount.discountName,
+            discountType: item.discount.discountType,
+            discountValue: item.discount.discountValue,
+            discountAmount: item.discount.discountAmount
+          } : undefined
+        })),
+        customer: customerInfo,
+        paymentMethod: "cash" as const,
+        paymentStatus: "pending"
+      }
+
+      const bill = await apiClient.createBill(billData)
+      
+      // Send bill via WhatsApp
+      const result = await apiClient.sendBillViaWhatsApp(bill._id, customerInfo.phone)
+      
+      // Open WhatsApp URL in new window
+      if (result.whatsappUrl) {
+        window.open(result.whatsappUrl, '_blank')
+      }
+      
+      setSuccess(`Bill ${bill.billNumber} created successfully! WhatsApp opened for sending.`)
+      clearBill()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to send bill via WhatsApp")
+    } finally {
+      setIsSendingWhatsApp(false)
     }
   }
 
@@ -305,13 +375,39 @@ export function POSBilling() {
                     <FileText className="mr-2 h-4 w-4" />
                     Hold Bill
                   </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleSendWhatsApp} 
+                    disabled={billItems.length === 0 || isSendingWhatsApp || !customerInfo.phone || customerInfo.phone.trim() === ''}
+                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
+                  >
+                    <MessageSquare className="mr-2 h-4 w-4" />
+                    {isSendingWhatsApp ? "Sending..." : "WhatsApp"}
+                  </Button>
                 </div>
               </div>
             </div>
 
             {/* Customer Information */}
             <div className="flex-shrink-0">
-              <CustomerInfo customerInfo={customerInfo} onCustomerInfoChange={setCustomerInfo} />
+              <CustomerInfo 
+                customerInfo={{
+                  name: customerInfo.name || '',
+                  phone: customerInfo.phone || '',
+                  email: customerInfo.email,
+                  address: customerInfo.address,
+                  gstNumber: customerInfo.gstNumber
+                }} 
+                onCustomerInfoChange={(newInfo) => {
+                  setCustomerInfo({
+                    name: newInfo.name || '',
+                    phone: newInfo.phone || '',
+                    email: newInfo.email,
+                    address: newInfo.address,
+                    gstNumber: newInfo.gstNumber
+                  })
+                }} 
+              />
             </div>
 
             {/* Items Billing Table - Scrollable */}
@@ -333,22 +429,45 @@ export function POSBilling() {
 
           {/* Right Side - Fixed Sidebar */}
           <div className="w-full lg:w-80 flex-shrink-0 border-l bg-muted/50 flex flex-col">
-            {/* Fixed Top Section - Summary and Payment */}
-            <div className="flex-shrink-0 p-4 space-y-4 border-b">
-              {/* Billing Summary - Fixed */}
-              <div className="space-y-2">
-                <h3 className="text-sm font-semibold text-foreground">Bill Summary</h3>
-                <BillingSummary items={billItems} />
-              </div>
-              
-              {/* Payment Section - Fixed */}
-              {billItems.length > 0 && (
-                <div className="space-y-2">
-                  {/* <h3 className="text-sm font-semibold text-gray-700">Payment</h3> */}
-                  <PaymentSection grandTotal={Math.round(grandTotal)} onPayment={handlePayment} isProcessing={isProcessing} />
-                </div>
-              )}
+            {/* Fixed Top Section - Summary Card */}
+            <div className="flex-shrink-0 p-4 border-b">
+              <Card className="bg-gradient-to-br from-background to-muted/30 shadow-sm">
+                <CardHeader className="pb-1">
+                  <CardTitle className="text-lg flex items-center gap-2">
+                    <ShoppingCart className="h-5 w-5" />
+                    Bill Summary
+                    {billItems.length > 0 && (
+                      <span className="ml-auto text-sm bg-primary/10 text-primary px-2 py-1 rounded-full">
+                        {billItems.length} items
+                      </span>
+                    )}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="pt-0">
+                  <BillingSummary items={billItems} />
+                </CardContent>
+              </Card>
             </div>
+            
+            {/* Fixed Payment Section Card */}
+            {billItems.length > 0 && (
+              <div className="flex-shrink-0 p-4 border-b">
+                <Card className="bg-gradient-to-br from-background to-muted/30 shadow-sm">
+                  <CardHeader className="pb-1">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <Wallet className="h-5 w-5" />
+                      Payment
+                      <span className="ml-auto text-sm bg-primary/10 text-primary px-2 py-1 rounded-full">
+                        ₹{Math.round(grandTotal).toLocaleString('en-IN')}
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0">
+                    <PaymentSection grandTotal={Math.round(grandTotal)} onPayment={handlePayment} isProcessing={isProcessing} />
+                  </CardContent>
+                </Card>
+              </div>
+            )}
             
             {/* Scrollable Content Area (if needed in future) */}
             <div className="flex-1 overflow-y-auto p-4">

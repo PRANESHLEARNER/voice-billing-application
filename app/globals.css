@@ -161,4 +161,148 @@
     margin: 0 !important;
     padding: 0 !important;
   }
+  
+  /* Dialog content padding and spacing fixes for fullscreen mode */
+  .fullscreen-mode [data-slot="dialog-content"],
+  .fullscreen-mode [data-slot="alert-dialog-content"] {
+    /* Content padding improvements */
+    padding: 2rem !important;
+  }
+  
+  /* Improve spacing for dialog header content */
+  .fullscreen-mode [data-slot="dialog-content"] .dialog-header,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .dialog-header,
+  .fullscreen-mode [data-slot="dialog-content"] .DialogHeader,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .DialogHeader {
+    margin-bottom: 1.5rem !important;
+    padding-bottom: 1rem !important;
+    border-bottom: 1px solid var(--border) !important;
+  }
+  
+  /* Title and description spacing */
+  .fullscreen-mode [data-slot="dialog-content"] h2,
+  .fullscreen-mode [data-slot="alert-dialog-content"] h2,
+  .fullscreen-mode [data-slot="dialog-content"] .DialogTitle,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .DialogTitle {
+    margin-bottom: 0.75rem !important;
+    padding: 0 !important;
+  }
+  
+  .fullscreen-mode [data-slot="dialog-content"] .DialogDescription,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .DialogDescription {
+    margin-bottom: 1rem !important;
+    padding: 0 !important;
+    line-height: 1.5 !important;
+  }
+  
+  /* Space-y utilities improvements */
+  .fullscreen-mode [data-slot="dialog-content"] .space-y-3 > * + *,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .space-y-3 > * + * {
+    margin-top: 1rem !important;
+  }
+  
+  .fullscreen-mode [data-slot="dialog-content"] .space-y-2 > * + *,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .space-y-2 > * + * {
+    margin-top: 0.75rem !important;
+  }
+  
+  .fullscreen-mode [data-slot="dialog-content"] .space-y-4 > * + *,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .space-y-4 > * + * {
+    margin-top: 1.25rem !important;
+  }
+  
+  /* Grid spacing improvements */
+  .fullscreen-mode [data-slot="dialog-content"] .grid,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .grid {
+    gap: 1rem !important;
+  }
+  
+  .fullscreen-mode [data-slot="dialog-content"] .gap-3,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .gap-3 {
+    gap: 0.75rem !important;
+  }
+  
+  .fullscreen-mode [data-slot="dialog-content"] .gap-4,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .gap-4 {
+    gap: 1rem !important;
+  }
+  
+  /* Table cell padding improvements */
+  .fullscreen-mode [data-slot="dialog-content"] td,
+  .fullscreen-mode [data-slot="alert-dialog-content"] td,
+  .fullscreen-mode [data-slot="dialog-content"] th,
+  .fullscreen-mode [data-slot="alert-dialog-content"] th {
+    padding: 0.75rem 0.5rem !important;
+  }
+  
+  /* Button spacing improvements */
+  .fullscreen-mode [data-slot="dialog-content"] button,
+  .fullscreen-mode [data-slot="alert-dialog-content"] button {
+    padding: 0.5rem 1rem !important;
+    min-height: 2.5rem !important;
+  }
+  
+  /* Input field padding improvements */
+  .fullscreen-mode [data-slot="dialog-content"] input,
+  .fullscreen-mode [data-slot="alert-dialog-content"] input,
+  .fullscreen-mode [data-slot="dialog-content"] select,
+  .fullscreen-mode [data-slot="alert-dialog-content"] select,
+  .fullscreen-mode [data-slot="dialog-content"] textarea,
+  .fullscreen-mode [data-slot="alert-dialog-content"] textarea {
+    padding: 0.5rem 0.75rem !important;
+  }
+  
+  /* Badge and label spacing */
+  .fullscreen-mode [data-slot="dialog-content"] .badge,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .badge,
+  .fullscreen-mode [data-slot="dialog-content"] .Badge,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .Badge {
+    padding: 0.25rem 0.5rem !important;
+  }
+  
+  /* Separator spacing */
+  .fullscreen-mode [data-slot="dialog-content"] .separator,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .separator,
+  .fullscreen-mode [data-slot="dialog-content"] .Separator,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .Separator,
+  .fullscreen-mode [data-slot="dialog-content"] hr,
+  .fullscreen-mode [data-slot="alert-dialog-content"] hr {
+    margin: 1.5rem 0 !important;
+  }
+  
+  /* Text content spacing */
+  .fullscreen-mode [data-slot="dialog-content"] p,
+  .fullscreen-mode [data-slot="alert-dialog-content"] p {
+    margin-bottom: 0.75rem !important;
+    line-height: 1.6 !important;
+  }
+  
+  /* List spacing */
+  .fullscreen-mode [data-slot="dialog-content"] ul,
+  .fullscreen-mode [data-slot="alert-dialog-content"] ul,
+  .fullscreen-mode [data-slot="dialog-content"] ol,
+  .fullscreen-mode [data-slot="alert-dialog-content"] ol {
+    margin-bottom: 1rem !important;
+    padding-left: 1.5rem !important;
+  }
+  
+  .fullscreen-mode [data-slot="dialog-content"] li,
+  .fullscreen-mode [data-slot="alert-dialog-content"] li {
+    margin-bottom: 0.5rem !important;
+  }
+  
+  /* Form field spacing */
+  .fullscreen-mode [data-slot="dialog-content"] .form-field,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .form-field {
+    margin-bottom: 1rem !important;
+  }
+  
+  /* Card and panel spacing */
+  .fullscreen-mode [data-slot="dialog-content"] .card,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .card,
+  .fullscreen-mode [data-slot="dialog-content"] .Card,
+  .fullscreen-mode [data-slot="alert-dialog-content"] .Card {
+    padding: 1rem !important;
+    margin-bottom: 1rem !important;
+  }
 }

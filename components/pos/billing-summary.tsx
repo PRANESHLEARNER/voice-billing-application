@@ -56,9 +56,9 @@ export function BillingSummary({ items }: BillingSummaryProps) {
         <span className="font-medium">{formatCurrency(discountedSubtotal)}</span>
       </div>
 
-      <div className="flex justify-between text-xs">
-        <span>Total Tax:</span>
-        <span className="font-medium">{formatCurrency(calculations.totalTax)}</span>
+      <div className="flex justify-between text-xs font-semibold text-blue-600">
+        <span>Total Tax ({calculations.totalTax > 0 ? ((calculations.totalTax / discountedSubtotal) * 100).toFixed(1) : 0}%):</span>
+        <span className="font-bold">{formatCurrency(calculations.totalTax)}</span>
       </div>
 
       {Math.abs(roundOff) > 0.01 && (
@@ -78,37 +78,6 @@ export function BillingSummary({ items }: BillingSummaryProps) {
         <span className="text-primary">{formatCurrency(finalTotal)}</span>
       </div>
 
-      {/* Tax Breakdown */}
-      {calculations.totalTax > 0 && (
-        <div className="mt-2 p-2 bg-muted rounded-md">
-          <h4 className="text-xs font-medium mb-1">Tax Breakdown</h4>
-          {items.reduce((taxGroups: { [key: number]: { amount: number; tax: number } }, item) => {
-            const rate = item.product.taxRate
-            if (!taxGroups[rate]) {
-              taxGroups[rate] = { amount: 0, tax: 0 }
-            }
-            taxGroups[rate].amount += item.amount
-            taxGroups[rate].tax += item.taxAmount
-            return taxGroups
-          }, {}) &&
-            Object.entries(
-              items.reduce((taxGroups: { [key: number]: { amount: number; tax: number } }, item) => {
-                const rate = item.product.taxRate
-                if (!taxGroups[rate]) {
-                  taxGroups[rate] = { amount: 0, tax: 0 }
-                }
-                taxGroups[rate].amount += item.amount
-                taxGroups[rate].tax += item.taxAmount
-                return taxGroups
-              }, {})
-            ).map(([rate, data]) => (
-              <div key={rate} className="flex justify-between text-[11px] text-muted-foreground">
-                <span>{rate}% Tax:</span>
-                <span>{formatCurrency(data.tax)}</span>
-              </div>
-            ))}
-        </div>
-      )}
     </div>
   )
 }

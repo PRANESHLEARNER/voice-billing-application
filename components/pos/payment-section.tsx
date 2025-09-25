@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Banknote, Loader2, CreditCard, Smartphone } from "lucide-react"
+import { Banknote, Loader2, CreditCard, Smartphone, Layers } from "lucide-react"
 import { RazorpayPaymentDialog } from "@/components/pos/razorpay-payment-dialog"
 
 interface PaymentSectionProps {
@@ -164,42 +164,42 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
       <div className="space-y-3">
         <h3 className="text-sm font-semibold text-foreground">Payment</h3>
         {/* Payment Method Selection */}
-        <div className="flex gap-0.5 mt-2 overflow-hidden">
+        <div className="grid grid-cols-4 gap-1 mt-2">
           <Button
             variant={paymentMethod === "cash" ? "default" : "outline"}
             size="sm"
             onClick={() => setPaymentMethod("cash")}
-            className="flex items-center gap-0.5 flex-shrink-0 px-2 py-1 text-xs h-7"
+            className="flex flex-col items-center gap-1 p-2 h-auto min-h-[48px]"
           >
             <Banknote className="h-3 w-3" />
-            Cash
+            <span className="text-xs font-medium">Cash</span>
           </Button>
           <Button
             variant={paymentMethod === "card" ? "default" : "outline"}
             size="sm"
             onClick={() => setPaymentMethod("card")}
-            className="flex items-center gap-0.5 flex-shrink-0 px-2 py-1 text-xs h-7"
+            className="flex flex-col items-center gap-1 p-2 h-auto min-h-[48px]"
           >
             <CreditCard className="h-3 w-3" />
-            Card
+            <span className="text-xs font-medium">Card</span>
           </Button>
           <Button
             variant={paymentMethod === "upi" ? "default" : "outline"}
             size="sm"
             onClick={() => setPaymentMethod("upi")}
-            className="flex items-center gap-0.5 flex-shrink-0 px-2 py-1 text-xs h-7"
+            className="flex flex-col items-center gap-1 p-2 h-auto min-h-[48px]"
           >
             <Smartphone className="h-3 w-3" />
-            UPI
+            <span className="text-xs font-medium">UPI</span>
           </Button>
           <Button
             variant={paymentMethod === "mixed" ? "default" : "outline"}
             size="sm"
             onClick={() => setPaymentMethod("mixed")}
-            className="flex items-center gap-0.5 flex-shrink-0 px-2 py-1 text-xs h-7"
+            className="flex flex-col items-center gap-1 p-2 h-auto min-h-[48px]"
           >
-            <Banknote className="h-3 w-3" />
-            Mixed
+            <Layers className="h-3 w-3" />
+            <span className="text-xs font-medium">Mixed</span>
           </Button>
         </div>
           <div className="flex justify-between text-sm font-bold">

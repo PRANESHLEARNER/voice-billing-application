@@ -9,7 +9,6 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { CalendarDays } from "lucide-react"
 import { SalesOverview } from "./sales-overview"
 import { TopProducts } from "./top-products"
-import { InventorySummary } from "./inventory-summary"
 import { SalesTrendsChart } from "./sales-trends-chart"
 import { CategoriesPerformanceChart } from "./categories-performance-chart"
 
@@ -74,10 +73,9 @@ export function ReportsDashboard() {
 
       {/* Reports Tabs */}
       <Tabs defaultValue="sales" className="w-full">
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="sales">Sales Analytics</TabsTrigger>
           <TabsTrigger value="products">Product Performance</TabsTrigger>
-          <TabsTrigger value="inventory">Inventory Management</TabsTrigger>
         </TabsList>
 
         <TabsContent value="sales" className="space-y-6">
@@ -97,9 +95,6 @@ export function ReportsDashboard() {
           <CategoriesPerformanceChart startDate={startDate} endDate={endDate} />
         </TabsContent>
 
-        <TabsContent value="inventory" className="space-y-6">
-          <InventorySummary />
-        </TabsContent>
       </Tabs>
     </div>
   )

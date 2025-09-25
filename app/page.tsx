@@ -9,6 +9,7 @@ import { POSBilling } from "@/components/pos/pos-billing"
 import { ShiftManagement } from "@/components/shifts/shift-management"
 import { BillList } from "@/components/bills/bill-list"
 import { ReportsDashboard } from "@/components/reports/reports-dashboard"
+import { InventorySummary } from "@/components/reports/inventory-summary"
 import { EmployeeList } from "@/components/employees/employee-list"
 import { DiscountList } from "@/components/discounts/discount-list"
 import { SettingsManagement } from "@/components/settings/settings-management"
@@ -46,6 +47,14 @@ function ShiftsTab() {
   return (
     <div className="p-6">
       <ShiftManagement />
+    </div>
+  )
+}
+
+function InventoryTab() {
+  return (
+    <div className="p-6">
+      <InventorySummary />
     </div>
   )
 }
@@ -109,6 +118,8 @@ export default function HomePage() {
         return <BillingTab isFullscreen={isFullscreen} />
       case "products":
         return <ProductsTab />
+      case "inventory":
+        return <InventoryTab />
       case "bills":
         return <BillsTab />
       case "shifts":

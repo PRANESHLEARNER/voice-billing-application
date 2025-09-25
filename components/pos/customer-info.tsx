@@ -7,6 +7,7 @@ import { User, X } from "lucide-react"
 interface CustomerInfo {
   name?: string
   phone?: string
+  email?: string
   address?: string
   gstNumber?: string
 }
@@ -50,6 +51,13 @@ export function CustomerInfo({ customerInfo, onCustomerInfoChange }: CustomerInf
           value={editValues.phone || ""}
           onChange={(e) => handleInputChange("phone", e.target.value)}
           placeholder="Customer Phone"
+          className="h-10 text-base w-40"
+        />
+        <Input
+          value={editValues.email || ""}
+          onChange={(e) => handleInputChange("email", e.target.value)}
+          type="email"
+          placeholder="Customer Email"
           className="h-10 text-base w-40"
         />
         <Input

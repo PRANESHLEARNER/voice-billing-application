@@ -323,6 +323,74 @@ router.get("/categories-performance", auth, async (req, res) => {
   }
 })
 
+// Get Top Products by Category
+router.get("/top-products-by-category", auth, async (req, res) => {
+  try {
+    const { startDate, endDate, limit = 5 } = req.query
+
+    const matchStage = {
+      status: "completed",
+    }
+
+    if (startDate || endDate) {
+      matchStage.createdAt = {}
+      if (startDate) matchStage.createdAt.$gte = new Date(startDate)
+      if (endDate) matchStage.createdAt.$lte = new Date(endDate)
+    }
+
+    const topProductsByCategory = await Bill.aggregate([
+      { $match: matchStage },
+      { $unwind: "$items" },
+      {
+        $group: {
+          _id: {
+            category: "$items.category",
+            productName: "$items.productName",
+            productId: "$items.productId"
+          },
+          totalRevenue: { $sum: "$items.totalAmount" },
+          totalQuantity: { $sum: "$items.quantity" },
+          totalOrders: { $count: {} },
+          avgPrice: { $avg: "$items.rate" }
+        }
+      },
+      {
+        $group: {
+          _id: "$_id.category",
+          products: {
+            $push: {
+              productName: "$_id.productName",
+              productId: "$_id.productId",
+              totalRevenue: "$totalRevenue",
+              totalQuantity: "$totalQuantity",
+              totalOrders: "$totalOrders",
+              avgPrice: "$avgPrice"
+            }
+          },
+          categoryRevenue: { $sum: "$totalRevenue" }
+        }
+      },
+      {
+        $project: {
+          category: "$_id",
+          products: {
+            $slice: [
+              { $sortArray: { input: "$products", sortBy: { totalRevenue: -1 } } },
+              parseInt(limit)
+            ]
+          },
+          categoryRevenue: 1
+        }
+      },
+      { $sort: { categoryRevenue: -1 } }
+    ])
+
+    res.json(topProductsByCategory)
+  } catch (error) {
+    res.status(500).json({ message: "Server error", error: error.message })
+  }
+})
+
 // Payment Methods Report
 router.get("/payment-methods", auth, async (req, res) => {
   try {

@@ -1,4 +1,5 @@
 const nodemailer = require('nodemailer');
+const { generateBillPDF } = require('./pdfService');
 
 // Create email transporter
 const createTransporter = () => {
@@ -677,6 +678,60 @@ const sendOutOfStockNotificationWithWhatsApp = async (products) => {
   }
 };
 
+// Send bill by email
+const sendBillByEmail = async (bill, customerEmail) => {
+  try {
+    console.log('📧 Starting email bill sending process...');
+    
+    const transporter = createTransporter();
+    
+    // Generate PDF bill
+    console.log('📄 Generating PDF bill...');
+    const pdfBuffer = await generateBillPDF(bill);
+    console.log('✅ PDF bill generated successfully');
+    
+    // No HTML content needed - only PDF attachment will be sent
+    
+    const mailOptions = {
+      from: process.env.EMAIL_USER,
+      to: customerEmail,
+      subject: `Supermarket Purchase Bill`,
+      text: `Dear Customer,
+
+Thank you for shopping at Supermarket Store!
+
+Your bill for ₹${bill.grandTotal.toFixed(2)} is attached to this email as a PDF file.
+
+Bill Details:
+- Bill Number: ${bill.billNumber}
+- Date: ${new Date(bill.createdAt).toLocaleDateString('en-US', { year: 'numeric', month: 'short', day: 'numeric' })}
+- Total Amount: ₹${bill.grandTotal.toFixed(2)}
+- Payment Method: ${bill.paymentMethod.toUpperCase()}
+
+Please find the detailed bill attached. For any queries, feel free to contact us.
+
+Thank you for your purchase!
+
+Supermarket Store
+Phone: +1 234 567 8900`,
+      attachments: [
+        {
+          filename: `Bill_${bill.billNumber}.pdf`,
+          content: pdfBuffer,
+          contentType: 'application/pdf'
+        }
+      ]
+    };
+    
+    const result = await transporter.sendMail(mailOptions);
+    console.log(`✅ Bill #${bill.billNumber} sent successfully to ${customerEmail}:`, result.messageId);
+    return result;
+  } catch (error) {
+    console.error(`❌ Error sending bill #${bill.billNumber} to ${customerEmail}:`, error);
+    throw error;
+  }
+};
+
 module.exports = {
   sendLowStockNotification,
   sendOutOfStockNotification,
@@ -684,5 +739,6 @@ module.exports = {
   testEmailConfiguration,
   sendEndOfDayStockSummary,
   sendLowStockNotificationWithWhatsApp,
-  sendOutOfStockNotificationWithWhatsApp
+  sendOutOfStockNotificationWithWhatsApp,
+  sendBillByEmail
 };

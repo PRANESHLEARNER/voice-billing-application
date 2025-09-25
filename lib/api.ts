@@ -173,6 +173,44 @@ class ApiClient {
     })
   }
 
+  async sendBillByEmail(id: string, email: string) {
+    return this.request<{ message: string }>(`/bills/${id}/send-email`, {
+      method: "POST",
+      body: JSON.stringify({ email }),
+    })
+  }
+
+  // Send bill via WhatsApp
+  async sendBillViaWhatsApp(id: string, phoneNumber: string) {
+    return this.request<{ 
+      success: boolean
+      message: string
+      whatsappUrl: string
+      phoneNumber: string
+      billNumber: string
+    }>(`/bills/${id}/whatsapp`, {
+      method: "POST",
+      body: JSON.stringify({ phoneNumber }),
+    })
+  }
+
+
+  // Generate PDF for a bill
+  async generateBillPDF(billId: string): Promise<Blob> {
+    const response = await fetch(`${API_BASE_URL}/bills/${billId}/pdf`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${authService.getToken()}`
+      }
+    })
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ message: "Network error" }))
+      throw new Error(error.message || `HTTP ${response.status}`)
+    }
+
+    return await response.blob()
+  }
 
   // -------------------
   // Shift API methods
@@ -382,6 +420,15 @@ class ApiClient {
     return this.request<CategoryPerformance[]>(`/reports/categories-performance${query ? `?${query}` : ""}`)
   }
 
+  async getTopProductsByCategory(params?: { startDate?: string; endDate?: string; limit?: number }) {
+    const searchParams = new URLSearchParams()
+    if (params?.startDate) searchParams.append("startDate", params.startDate)
+    if (params?.endDate) searchParams.append("endDate", params.endDate)
+    if (params?.limit) searchParams.append("limit", params.limit.toString())
+    const query = searchParams.toString()
+    return this.request<CategoryTopProducts[]>(`/reports/top-products-by-category${query ? `?${query}` : ""}`)
+  }
+
   async sendLowStockEmail() {
     return this.request<{ message: string; count: number; products: Array<{ id: string; name: string; code: string; stock: number }> }>(`/reports/send-low-stock-email`, {
       method: "POST"
@@ -583,10 +630,18 @@ export interface BillItem {
   }
 }
 
+export interface CustomerInfo {
+  name: string;
+  phone: string;
+  email?: string;
+  address?: string;
+  gstNumber?: string;
+}
+
 export interface Bill {
   _id: string
   billNumber: string
-  customer: { name?: string; phone?: string; address?: string; gstNumber?: string }
+  customer: CustomerInfo
   items: BillItem[]
   subtotal: number
   totalDiscount: number
@@ -771,6 +826,33 @@ export interface CategoryPerformance {
   uniqueProductsCount: number
 }
 
+export interface TopProductByCategory {
+  productName: string
+  productId: string
+  totalRevenue: number
+  totalQuantity: number
+  totalOrders: number
+  avgPrice: number
+}
+
+export interface TopProduct {
+  _id: {
+    productId: string
+    productName: string
+    productCode: string
+  }
+  totalRevenue: number
+  totalQuantity: number
+  totalOrders: number
+  avgPrice: number
+}
+
+export interface CategoryTopProducts {
+  category: string
+  products: TopProductByCategory[]
+  categoryRevenue: number
+}
+
 export interface Discount {
   _id: string
   name: string
@@ -820,3 +902,13 @@ export interface DiscountStats {
 }
 
 export const apiClient = new ApiClient()
+
+// Standalone function for sending bill via email
+export const sendBillByEmail = async (billId: string, email: string) => {
+  return apiClient.sendBillByEmail(billId, email)
+}
+
+// Standalone function for sending bill via WhatsApp
+export const sendBillViaWhatsApp = async (billId: string, phoneNumber: string) => {
+  return apiClient.sendBillViaWhatsApp(billId, phoneNumber)
+}
