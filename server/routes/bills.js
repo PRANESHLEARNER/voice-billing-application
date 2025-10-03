@@ -15,7 +15,7 @@ const router = express.Router();
  */
 router.post("/", auth, async (req, res) => {
   try {
-    const { items, customer, cashTendered = 0, paymentMethod, paymentDetails, paymentBreakdown } = req.body;
+    const { items, customer, cashTendered = 0, paymentMethod, paymentDetails, paymentBreakdown, applyLoyaltyDiscount = false } = req.body;
 
     if (!Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ message: "No items provided for the bill." });
@@ -137,7 +137,35 @@ router.post("/", auth, async (req, res) => {
       await Discount.recordUsage(discountId, usageCount);
     }
 
-    const grandTotal = subtotal + totalTax;
+    // Apply loyalty discount if eligible
+    let loyaltyDiscountAmount = 0;
+    let loyaltyDiscountInfo = null;
+    
+    if (applyLoyaltyDiscount && customer && customer.phone) {
+      // Clean phone number
+      const cleanedPhone = customer.phone.replace(/[^\d]/g, '');
+      
+      // Count previous completed bills for this customer
+      const previousPurchaseCount = await Bill.countDocuments({
+        "customer.phone": cleanedPhone,
+        status: "completed"
+      });
+      
+      // Apply 2% discount after 10 purchases
+      if (previousPurchaseCount >= 10) {
+        loyaltyDiscountAmount = Math.round((subtotal + totalTax) * 0.02); // 2% discount
+        loyaltyDiscountInfo = {
+          discountId: "loyalty_discount",
+          discountName: "Loyalty Discount (2%)",
+          discountType: "percentage",
+          discountValue: 2,
+          discountAmount: loyaltyDiscountAmount
+        };
+        totalDiscount += loyaltyDiscountAmount;
+      }
+    }
+
+    const grandTotal = subtotal + totalTax - loyaltyDiscountAmount;
     const roundOff = Math.round(grandTotal) - grandTotal;
     const finalTotal = Math.round(grandTotal);
     const changeDue = Math.max(0, cashTendered - finalTotal);
@@ -161,6 +189,7 @@ router.post("/", auth, async (req, res) => {
       paymentMethod,
       paymentDetails,
       paymentBreakdown,
+      loyaltyDiscount: loyaltyDiscountInfo,
       cashier: req.user._id,
       cashierName: req.user.name,
       shift: activeShift?._id,
@@ -396,14 +425,27 @@ router.get("/:id/pdf", auth, async (req, res) => {
     // Import the PDF service
     const { generateBillPDF } = require("../services/pdfService");
     
-    // Transform the bill items to map variantSize to size for PDF compatibility
+    // Transform the bill for PDF compatibility
+    const billObj = bill.toObject();
     const transformedBill = {
-      ...bill.toObject(),
+      ...billObj,
+      // Include loyalty discount if it exists
+      ...(billObj.loyaltyDiscount && { loyaltyDiscount: billObj.loyaltyDiscount }),
+      // Map variantSize to size for PDF template
       items: bill.items.map(item => ({
         ...item.toObject(),
-        size: item.variantSize  // Map variantSize to size for PDF template
+        size: item.variantSize
       }))
     };
+    
+    console.log('PDF Generation - Bill data:', JSON.stringify({
+      billNumber: bill.billNumber,
+      hasLoyaltyDiscount: !!bill.loyaltyDiscount,
+      loyaltyDiscount: bill.loyaltyDiscount,
+      subtotal: bill.subtotal,
+      totalTax: bill.totalTax,
+      grandTotal: bill.grandTotal
+    }, null, 2));
     
     // Generate PDF
     const pdfBuffer = await generateBillPDF(transformedBill);
@@ -469,6 +511,46 @@ router.post("/:id/whatsapp", auth, async (req, res) => {
     console.error("Error sending bill via WhatsApp:", error);
     res.status(500).json({ 
       message: "Failed to send bill via WhatsApp", 
+      error: error.message 
+    });
+  }
+});
+
+/**
+ * GET /api/bills/customer/:phone/purchase-count
+ * Get customer purchase count for loyalty discount
+ */
+router.get("/customer/:phone/purchase-count", auth, async (req, res) => {
+  try {
+    const { phone } = req.params;
+    
+    if (!phone) {
+      return res.status(400).json({ message: "Phone number is required" });
+    }
+    
+    // Clean phone number (remove spaces, dashes, etc.)
+    const cleanedPhone = phone.replace(/[^\d]/g, '');
+    
+    // Count all completed bills for this customer
+    const purchaseCount = await Bill.countDocuments({
+      "customer.phone": cleanedPhone,
+      status: "completed"
+    });
+    
+    // Check if customer is eligible for loyalty discount (10th purchase)
+    const isEligible = purchaseCount >= 9; // 9 previous purchases, current would be 10th
+    
+    res.json({
+      phone: cleanedPhone,
+      purchaseCount,
+      isEligible,
+      nextPurchaseForDiscount: 10 - purchaseCount
+    });
+    
+  } catch (error) {
+    console.error("Error getting customer purchase count:", error);
+    res.status(500).json({ 
+      message: "Failed to get customer purchase count", 
       error: error.message 
     });
   }

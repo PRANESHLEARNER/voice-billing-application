@@ -15,16 +15,11 @@ import {
   Save, 
   RefreshCw, 
   Store, 
-  Printer, 
-  Database, 
   Download, 
   Upload, 
   Moon, 
   Sun,
-  User,
-  Palette,
-  Bell,
-  Shield
+  Palette
 } from "lucide-react"
 
 interface SystemSettings {
@@ -36,21 +31,7 @@ interface SystemSettings {
   currency: string
   taxRate: number
   enablePrint: boolean
-  autoBackup: boolean
-  backupInterval: number
-  lowStockThreshold: number
   theme: 'light' | 'dark' | 'system'
-  printerType: 'thermal' | 'laser' | 'inkjet'
-  paperSize: '80mm' | '58mm' | 'a4'
-  printHeader: boolean
-  printFooter: boolean
-  notifications: boolean
-  soundAlerts: boolean
-  autoLogout: boolean
-  autoLogoutMinutes: number
-  language: string
-  dateFormat: string
-  timeZone: string
 }
 
 export function SettingsManagement() {
@@ -63,21 +44,7 @@ export function SettingsManagement() {
     currency: "INR",
     taxRate: 18,
     enablePrint: true,
-    autoBackup: true,
-    backupInterval: 24,
-    lowStockThreshold: 10,
-    theme: 'system',
-    printerType: 'thermal',
-    paperSize: '80mm',
-    printHeader: true,
-    printFooter: true,
-    notifications: true,
-    soundAlerts: true,
-    autoLogout: false,
-    autoLogoutMinutes: 30,
-    language: 'en',
-    dateFormat: 'dd/MM/yyyy',
-    timeZone: 'Asia/Kolkata'
+    theme: 'system'
   })
   const [isLoading, setIsLoading] = useState(false)
   const [isSaving, setIsSaving] = useState(false)
@@ -258,16 +225,13 @@ export function SettingsManagement() {
       )}
 
       <Tabs defaultValue="store" className="space-y-6">
-        <TabsList className="grid w-full grid-cols-5">
+        <TabsList className="grid w-full grid-cols-2">
           <TabsTrigger value="store">Store</TabsTrigger>
-          <TabsTrigger value="billing">Billing</TabsTrigger>
-          <TabsTrigger value="printer">Printer</TabsTrigger>
           <TabsTrigger value="appearance">Appearance</TabsTrigger>
-          <TabsTrigger value="advanced">Advanced</TabsTrigger>
         </TabsList>
 
         <TabsContent value="store" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             {/* Store Information */}
             <Card>
               <CardHeader>
@@ -326,240 +290,11 @@ export function SettingsManagement() {
               </CardContent>
             </Card>
 
-            {/* Inventory Settings */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Database className="h-5 w-5" />
-                  Inventory Settings
-                </CardTitle>
-                <CardDescription>
-                  Manage inventory and stock preferences
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="lowStockThreshold">Low Stock Threshold</Label>
-                  <Input
-                    id="lowStockThreshold"
-                    type="number"
-                    value={settings.lowStockThreshold}
-                    onChange={(e) => handleInputChange("lowStockThreshold", Number(e.target.value))}
-                  />
-                  <p className="text-sm text-muted-foreground">
-                    Alert when stock falls below this quantity
-                  </p>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Auto Backup</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Automatically backup system data
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.autoBackup}
-                    onCheckedChange={(checked) => handleInputChange("autoBackup", checked)}
-                  />
-                </div>
-                {settings.autoBackup && (
-                  <div className="space-y-2">
-                    <Label htmlFor="backupInterval">Backup Interval (hours)</Label>
-                    <Input
-                      id="backupInterval"
-                      type="number"
-                      value={settings.backupInterval}
-                      onChange={(e) => handleInputChange("backupInterval", Number(e.target.value))}
-                    />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="billing" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Billing Settings */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Printer className="h-5 w-5" />
-                  Billing Settings
-                </CardTitle>
-                <CardDescription>
-                  Configure billing and tax preferences
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="grid grid-cols-2 gap-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="currency">Currency</Label>
-                    <Select value={settings.currency} onValueChange={(value) => handleInputChange("currency", value)}>
-                      <SelectTrigger>
-                        <SelectValue />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="INR">INR (₹)</SelectItem>
-                        <SelectItem value="USD">USD ($)</SelectItem>
-                        <SelectItem value="EUR">EUR (€)</SelectItem>
-                        <SelectItem value="GBP">GBP (£)</SelectItem>
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="taxRate">Default Tax Rate (%)</Label>
-                    <Input
-                      id="taxRate"
-                      type="number"
-                      value={settings.taxRate}
-                      onChange={(e) => handleInputChange("taxRate", Number(e.target.value))}
-                    />
-                  </div>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Enable Printing</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Allow bill printing functionality
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.enablePrint}
-                    onCheckedChange={(checked) => handleInputChange("enablePrint", checked)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Regional Settings */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Regional Settings
-                </CardTitle>
-                <CardDescription>
-                  Configure regional and language preferences
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="language">Language</Label>
-                  <Select value={settings.language} onValueChange={(value) => handleInputChange("language", value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="en">English</SelectItem>
-                      <SelectItem value="hi">हिन्दी (Hindi)</SelectItem>
-                      <SelectItem value="ta">தமிழ் (Tamil)</SelectItem>
-                      <SelectItem value="te">తెలుగు (Telugu)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="dateFormat">Date Format</Label>
-                  <Select value={settings.dateFormat} onValueChange={(value) => handleInputChange("dateFormat", value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="dd/MM/yyyy">DD/MM/YYYY</SelectItem>
-                      <SelectItem value="MM/dd/yyyy">MM/DD/YYYY</SelectItem>
-                      <SelectItem value="yyyy-MM-dd">YYYY-MM-DD</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="timeZone">Time Zone</Label>
-                  <Select value={settings.timeZone} onValueChange={(value) => handleInputChange("timeZone", value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="Asia/Kolkata">Asia/Kolkata (IST)</SelectItem>
-                      <SelectItem value="Asia/Dubai">Asia/Dubai (GST)</SelectItem>
-                      <SelectItem value="UTC">UTC</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
-
-        <TabsContent value="printer" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Printer Configuration */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Printer className="h-5 w-5" />
-                  Printer Configuration
-                </CardTitle>
-                <CardDescription>
-                  Configure printer settings and preferences
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="printerType">Printer Type</Label>
-                  <Select value={settings.printerType} onValueChange={(value: 'thermal' | 'laser' | 'inkjet') => handleInputChange("printerType", value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="thermal">Thermal Printer</SelectItem>
-                      <SelectItem value="laser">Laser Printer</SelectItem>
-                      <SelectItem value="inkjet">Inkjet Printer</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="paperSize">Paper Size</Label>
-                  <Select value={settings.paperSize} onValueChange={(value: '80mm' | '58mm' | 'a4') => handleInputChange("paperSize", value)}>
-                    <SelectTrigger>
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="80mm">80mm (Thermal)</SelectItem>
-                      <SelectItem value="58mm">58mm (Thermal)</SelectItem>
-                      <SelectItem value="a4">A4 (Standard)</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Print Header</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Include store header in prints
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.printHeader}
-                    onCheckedChange={(checked) => handleInputChange("printHeader", checked)}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Print Footer</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Include footer in prints
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.printFooter}
-                    onCheckedChange={(checked) => handleInputChange("printFooter", checked)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </TabsContent>
 
         <TabsContent value="appearance" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             {/* Theme Settings */}
             <Card>
               <CardHeader>
@@ -603,88 +338,9 @@ export function SettingsManagement() {
               </CardContent>
             </Card>
 
-            {/* Notification Settings */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Bell className="h-5 w-5" />
-                  Notification Settings
-                </CardTitle>
-                <CardDescription>
-                  Configure notification preferences
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Enable Notifications</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Show system notifications
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.notifications}
-                    onCheckedChange={(checked) => handleInputChange("notifications", checked)}
-                  />
-                </div>
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Sound Alerts</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Play sound for alerts
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.soundAlerts}
-                    onCheckedChange={(checked) => handleInputChange("soundAlerts", checked)}
-                  />
-                </div>
-              </CardContent>
-            </Card>
           </div>
         </TabsContent>
 
-        <TabsContent value="advanced" className="space-y-6">
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            {/* Security Settings */}
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Shield className="h-5 w-5" />
-                  Security Settings
-                </CardTitle>
-                <CardDescription>
-                  Configure security and session preferences
-                </CardDescription>
-              </CardHeader>
-              <CardContent className="space-y-4">
-                <div className="flex items-center justify-between">
-                  <div className="space-y-0.5">
-                    <Label>Auto Logout</Label>
-                    <p className="text-sm text-muted-foreground">
-                      Automatically logout after inactivity
-                    </p>
-                  </div>
-                  <Switch
-                    checked={settings.autoLogout}
-                    onCheckedChange={(checked) => handleInputChange("autoLogout", checked)}
-                  />
-                </div>
-                {settings.autoLogout && (
-                  <div className="space-y-2">
-                    <Label htmlFor="autoLogoutMinutes">Auto Logout After (minutes)</Label>
-                    <Input
-                      id="autoLogoutMinutes"
-                      type="number"
-                      value={settings.autoLogoutMinutes}
-                      onChange={(e) => handleInputChange("autoLogoutMinutes", Number(e.target.value))}
-                    />
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
-        </TabsContent>
       </Tabs>
     </div>
   )

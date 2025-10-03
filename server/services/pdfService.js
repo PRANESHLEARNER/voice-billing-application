@@ -6,6 +6,16 @@ const path = require('path');
 const generateBillPDF = async (bill) => {
   try {
     console.log('📄 Starting PDF generation for bill:', bill.billNumber);
+    console.log('📋 Bill data structure:', JSON.stringify({
+      billNumber: bill.billNumber,
+      hasDiscount: !!bill.discount,
+      discountAmount: bill.discount?.discountAmount,
+      hasLoyaltyDiscount: !!bill.loyaltyDiscount,
+      loyaltyDiscountAmount: bill.loyaltyDiscount?.amount,
+      subtotal: bill.subtotal,
+      totalTax: bill.totalTax,
+      grandTotal: bill.grandTotal
+    }, null, 2));
     
     // Generate HTML template for the bill
     const htmlTemplate = generateBillHTML(bill);
@@ -90,17 +100,16 @@ const generateBillHTML = (bill) => {
 
   // Generate receipt content as plain text with proper formatting
   let receiptContent = `
-     *************************************
-     *${centerText('SUPERMARKET STORE', 35)}*
-     *${centerText('123 Main Street, City', 35)}*
-     *${centerText('State, Country - 123456', 35)}*
-     *${centerText('Phone: +1 234 567 8900', 35)}*
-     *************************************
+${centerText('SUPERMARKET STORE', 32)}
+${centerText('123 Main Street, City', 32)}
+${centerText('State, Country - 123456', 32)}
+${centerText('Phone: +1 234 567 8900', 32)}
+${'='.repeat(32)}
 
 BILL #: ${bill.billNumber}
 DATE:  ${formatDate(bill.createdAt)}
 CASHIER: ${bill.cashierName}
--------------------------------------
+${'-'.repeat(32)}
   `;
 
   if (bill.customer || bill.customerInfo) {
@@ -112,59 +121,89 @@ CASHIER: ${bill.cashierName}
 CUSTOMER: ${customerName}
 ${customerPhone ? `PHONE: ${customerPhone}` : ''}
 ${customerEmail ? `EMAIL: ${customerEmail}` : ''}
--------------------------------------
+${'-'.repeat(32)}
     `;
   }
 
   // Add items section header
-  receiptContent += `ITEMS\n`;
+  receiptContent += `ITEMS\n${'-'.repeat(32)}\n`;
   
   // Add items
   bill.items.forEach(item => {
-    const itemName = `${item.product?.name || item.productName || 'Unknown Item'} ${item.size || item.variantSize ? `(${item.size || item.variantSize})` : ''}`;
+    const baseName = item.product?.name || item.productName || 'Unknown Item';
+    const sizeInfo = item.size || item.variantSize ? `(${item.size || item.variantSize})` : '';
     const itemTotal = formatCurrency(item.totalAmount || (item.rate * item.quantity));
     const qtyRate = `${item.quantity}x${formatCurrency(item.rate)}`;
     
-    // Item name and total (40 characters total)
-    receiptContent += `${padRight(itemName, 25)}${padLeft(itemTotal, 11)}\n`;
-    // Quantity and rate (indented, 40 characters total)
-    receiptContent += `  ${padRight(qtyRate, 23)}\n`;
+    // Handle long item names by wrapping them
+    const maxNameLength = 20; // Reduced from 25 to leave more space for amounts
+    const displayName = `${baseName} ${sizeInfo}`.trim();
+    
+    if (displayName.length <= maxNameLength) {
+      // Short name - single line
+      receiptContent += `${padRight(displayName, maxNameLength)}${padLeft(itemTotal, 12)}\n`;
+      receiptContent += `  ${padRight(qtyRate, maxNameLength - 2)}\n`;
+    } else {
+      // Long name - wrap to multiple lines
+      const firstLine = displayName.substring(0, maxNameLength);
+      const remainingName = displayName.substring(maxNameLength);
+      
+      // First line with name start and total
+      receiptContent += `${padRight(firstLine, maxNameLength)}${padLeft(itemTotal, 12)}\n`;
+      
+      // Second line with remaining name (if any)
+      if (remainingName.length > 0) {
+        const secondLine = remainingName.substring(0, maxNameLength);
+        receiptContent += `${padRight(secondLine, maxNameLength)}\n`;
+      }
+      
+      // Quantity and rate line
+      receiptContent += `  ${padRight(qtyRate, maxNameLength - 2)}\n`;
+    }
     
   });
 
   // Summary section
+  const labelWidth = 20; // Consistent label width
+  const valueWidth = 12; // Consistent value width
+  
   receiptContent += `
--------------------------------------
-${padRight('SUBTOTAL:', 25)}${padLeft(formatCurrency(bill.subtotal), 12)}
+${'-'.repeat(32)}
+${padRight('SUBTOTAL:', labelWidth)}${padLeft(formatCurrency(bill.subtotal), valueWidth)}
 `;
 
-  receiptContent += `${padRight('TOTAL TAX:', 25)}${padLeft(formatCurrency(bill.totalTax), 12)}\n`;
+  // Add loyalty discount if it exists
+  if (bill.loyaltyDiscount && bill.loyaltyDiscount.discountAmount > 0) {
+    receiptContent += `${padRight('LOYALTY DISCOUNT:', labelWidth)}${padLeft('-' + formatCurrency(bill.loyaltyDiscount.discountAmount), valueWidth)}\n`;
+  }
+
+  receiptContent += `${padRight('TOTAL TAX:', labelWidth)}${padLeft(formatCurrency(bill.totalTax), valueWidth)}\n`;
 
   if (Math.abs(bill.roundOff) > 0.01) {
-    receiptContent += `${padRight('ROUND OFF:', 25)}${padLeft((bill.roundOff > 0 ? '+' : '') + formatCurrency(bill.roundOff), 12)}\n`;
+    receiptContent += `${padRight('ROUND OFF:', labelWidth)}${padLeft((bill.roundOff > 0 ? '+' : '') + formatCurrency(bill.roundOff), valueWidth)}\n`;
   }
 
   receiptContent += `
-======================================
-${padRight('TOTAL:', 25)}${padLeft(formatCurrency(bill.grandTotal), 12)}
-======================================
+${'='.repeat(32)}
+${padRight('TOTAL:', labelWidth)}${padLeft(formatCurrency(bill.grandTotal), valueWidth)}
+${'='.repeat(32)}
 
 PAYMENT METHOD: ${bill.paymentMethod.toUpperCase()}
 `;
 
   if (bill.paymentMethod === 'cash') {
     receiptContent += `
-${padRight('CASH TENDERED:', 25)}${padLeft(formatCurrency(bill.cashTendered), 12)}
-${padRight('CHANGE:', 25)}${padLeft(formatCurrency(bill.changeDue), 12)}
+${padRight('CASH TENDERED:', labelWidth)}${padLeft(formatCurrency(bill.cashTendered), valueWidth)}
+${padRight('CHANGE:', labelWidth)}${padLeft(formatCurrency(bill.changeDue), valueWidth)}
 `;
   }
 
   receiptContent += `
---------------------------------------
-   THANK YOU FOR YOUR PURCHASE!
-       PLEASE VISIT AGAIN
-         ${bill.status === 'completed' ? '  *** PAID ***' : ''}
-**************************************
+${'-'.repeat(32)}
+${centerText('THANK YOU FOR YOUR PURCHASE!', 32)}
+${centerText('PLEASE VISIT AGAIN', 32)}
+${bill.status === 'completed' ? centerText('*** PAID ***', 32) : ''}
+${'='.repeat(32)}
   `;
 
   return `

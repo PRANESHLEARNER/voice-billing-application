@@ -1,6 +1,6 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Input } from "@/components/ui/input"
 import { User, X } from "lucide-react"
 
@@ -19,6 +19,11 @@ interface CustomerInfoProps {
 
 export function CustomerInfo({ customerInfo, onCustomerInfoChange }: CustomerInfoProps) {
   const [editValues, setEditValues] = useState(customerInfo)
+
+  // Sync parent state changes to local edit state
+  useEffect(() => {
+    setEditValues(customerInfo)
+  }, [customerInfo])
 
   const handleInputChange = (field: keyof CustomerInfo, value: string) => {
     const newValues = {

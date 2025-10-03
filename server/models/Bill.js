@@ -126,6 +126,13 @@ const billSchema = new mongoose.Schema(
         upiId: String,
       },
     }],
+    loyaltyDiscount: {
+      discountId: String,
+      discountName: String,
+      discountType: String,
+      discountValue: Number,
+      discountAmount: Number,
+    },
     cashier: {
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",

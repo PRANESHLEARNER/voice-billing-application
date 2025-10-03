@@ -194,6 +194,16 @@ class ApiClient {
     })
   }
 
+  // Check customer loyalty status
+  async getCustomerLoyaltyStatus(phoneNumber: string) {
+    return this.request<{
+      phone: string
+      purchaseCount: number
+      isEligible: boolean
+      nextPurchaseForDiscount: number
+    }>(`/bills/customer/${phoneNumber}/purchase-count`)
+  }
+
 
   // Generate PDF for a bill
   async generateBillPDF(billId: string): Promise<Blob> {
@@ -646,6 +656,13 @@ export interface Bill {
   subtotal: number
   totalDiscount: number
   totalTax: number
+  loyaltyDiscount?: {
+    discountId: string
+    discountName: string
+    discountType: string
+    discountValue: number
+    discountAmount: number
+  }
   roundOff: number
   grandTotal: number
   cashTendered: number

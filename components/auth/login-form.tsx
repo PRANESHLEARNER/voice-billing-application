@@ -89,16 +89,16 @@ export function LoginForm() {
                 "Sign In"
               )}
             </Button>
-          </form>
+          </form><br></br>
 
-          <div className="mt-6 text-center text-sm text-muted-foreground">
+          {/* <div className="mt-6 text-center text-sm text-muted-foreground">
             <p>Demo Credentials:</p>
             <p className="font-mono text-xs mt-1">
               Admin: admin@supermarket.com / admin123
               <br />
               Cashier: cashier@supermarket.com / cashier123
             </p>
-          </div>
+          </div> */}
         </CardContent>
       </Card>
     </div>

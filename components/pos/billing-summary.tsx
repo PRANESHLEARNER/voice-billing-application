@@ -5,9 +5,14 @@ import type { BillItem } from "./billing-table"
 
 interface BillingSummaryProps {
   items: BillItem[]
+  loyaltyStatus?: {
+    purchaseCount: number
+    isEligible: boolean
+    nextPurchaseForDiscount: number
+  } | null
 }
 
-export function BillingSummary({ items }: BillingSummaryProps) {
+export function BillingSummary({ items, loyaltyStatus }: BillingSummaryProps) {
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-IN", {
       style: "currency",
@@ -27,8 +32,13 @@ export function BillingSummary({ items }: BillingSummaryProps) {
     { subtotal: 0, totalTax: 0, totalDiscount: 0, totalItems: 0 },
   )
 
+  // Calculate loyalty discount (2% of subtotal + tax)
+  const loyaltyDiscountAmount = loyaltyStatus?.isEligible 
+    ? Math.round((calculations.subtotal + calculations.totalTax) * 0.02)
+    : 0
+
   const discountedSubtotal = calculations.subtotal - calculations.totalDiscount
-  const grandTotal = discountedSubtotal + calculations.totalTax
+  const grandTotal = discountedSubtotal + calculations.totalTax - loyaltyDiscountAmount
   const roundOff = Math.round(grandTotal) - grandTotal
   const finalTotal = Math.round(grandTotal)
 
@@ -48,6 +58,13 @@ export function BillingSummary({ items }: BillingSummaryProps) {
         <div className="flex justify-between text-xs text-green-600">
           <span>Total Discount:</span>
           <span className="font-medium">-{formatCurrency(calculations.totalDiscount)}</span>
+        </div>
+      )}
+
+      {loyaltyDiscountAmount > 0 && (
+        <div className="flex justify-between text-xs">
+          <span className="text-green-600">Loyalty Discount (2%):</span>
+          <span className="font-medium text-green-600">-{formatCurrency(loyaltyDiscountAmount)}</span>
         </div>
       )}
 

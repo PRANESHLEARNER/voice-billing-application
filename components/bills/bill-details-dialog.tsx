@@ -10,9 +10,9 @@ import { DialogHeader } from "@/components/ui/dialog"
 import { DialogTitle } from "@/components/ui/dialog"
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
 import { Separator } from "@/components/ui/separator"
-import { FileText, Printer, Download, X, Mail, Loader2 } from "lucide-react"
+import { FileText, Printer, Download, X, Mail, Loader2, MessageSquare } from "lucide-react"
 import type { Bill } from "@/lib/api"
-import { sendBillByEmail } from "@/lib/api"
+import { sendBillByEmail, sendBillViaWhatsApp } from "@/lib/api"
 
 interface BillDetailsDialogProps {
   bill: Bill | null
@@ -27,6 +27,8 @@ export function BillDetailsDialog({ bill, isOpen, onClose }: BillDetailsDialogPr
   const [emailInput, setEmailInput] = useState(bill.customer?.email || "")
   const [showEmailDialog, setShowEmailDialog] = useState(false)
   const [emailError, setEmailError] = useState("")
+  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false)
+  const [showWhatsAppDialog, setShowWhatsAppDialog] = useState(false)
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -141,6 +143,35 @@ export function BillDetailsDialog({ bill, isOpen, onClose }: BillDetailsDialogPr
     }
   }
 
+  const handleWhatsAppClick = () => {
+    if (!bill.customer?.phone || bill.customer.phone.trim() === '') {
+      console.error("Customer phone number is required to send WhatsApp message")
+      return
+    }
+    setShowWhatsAppDialog(true)
+  }
+
+  const confirmSendWhatsApp = async () => {
+    if (!bill || !bill.customer?.phone) return
+    
+    setIsSendingWhatsApp(true)
+    setShowWhatsAppDialog(false)
+    
+    try {
+      const result = await sendBillViaWhatsApp(bill._id, bill.customer.phone)
+      
+      if (result.whatsappUrl) {
+        window.open(result.whatsappUrl, '_blank')
+      }
+      
+      console.log("Bill sent successfully via WhatsApp!")
+    } catch (error) {
+      console.error('Error sending WhatsApp:', error)
+    } finally {
+      setIsSendingWhatsApp(false)
+    }
+  }
+
   const generateBillHTML = (billData: Bill) => {
     const formatCurrency = (amount: number) => {
       return new Intl.NumberFormat("en-IN", {
@@ -231,9 +262,13 @@ export function BillDetailsDialog({ bill, isOpen, onClose }: BillDetailsDialogPr
     receiptContent += `     ---------------------------------------\n`
     receiptContent += `     ${createAlignedRow('SUBTOTAL:', formatCurrency(billData.subtotal))}\n`
   
+    if (billData.loyaltyDiscount && billData.loyaltyDiscount.discountAmount > 0) {
+      receiptContent += `     ${createAlignedRow('LOYALTY DISCOUNT:', '-' + formatCurrency(billData.loyaltyDiscount.discountAmount))}\n`
+    }
     if (billData.totalDiscount > 0) {
       receiptContent += `     ${createAlignedRow('TOTAL DISCOUNT:', '-' + formatCurrency(billData.totalDiscount))}\n`
     }
+
   
     receiptContent += `     ${createAlignedRow('TOTAL TAX:', formatCurrency(billData.totalTax))}\n`
   
@@ -349,6 +384,19 @@ export function BillDetailsDialog({ bill, isOpen, onClose }: BillDetailsDialogPr
                 <Mail className="mr-2 h-4 w-4" />
                 Email
               </Button>
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={handleWhatsAppClick} 
+                disabled={isSendingWhatsApp || !bill.customer?.phone || bill.customer.phone.trim() === ''}
+                className="text-green-600 hover:text-green-700 hover:bg-green-50"
+              >
+                {isSendingWhatsApp ? (
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                ) : (
+                  <MessageSquare className="h-4 w-4" />
+                )}
+              </Button>
             </div>
           </div>
           <div className="text-center">
@@ -437,7 +485,7 @@ export function BillDetailsDialog({ bill, isOpen, onClose }: BillDetailsDialogPr
                   <TableRow>
                     <TableHead className="text-right w-[8%]">S.No</TableHead>
                     <TableHead className="w-[32%]">Product</TableHead>
-                    <TableHead className="text-right w-[10%]">Qty</TableHead>
+                    <TableHead className="text-center w-[8%] px-0">Qty</TableHead>
                     <TableHead className="text-right w-[12%]">Rate</TableHead>
                     <TableHead className="text-right w-[12%]">Discount</TableHead>
                     <TableHead className="text-right w-[12%]">Tax</TableHead>
@@ -458,7 +506,7 @@ export function BillDetailsDialog({ bill, isOpen, onClose }: BillDetailsDialogPr
                           )}
                         </div>
                       </TableCell>
-                      <TableCell className="text-right align-middle py-2">{item.quantity}</TableCell>
+                      <TableCell className="text-center align-middle py-2 px-0">{item.quantity}</TableCell>
                       <TableCell className="text-right align-middle py-2">{formatCurrency(item.rate)}</TableCell>
                       <TableCell className="text-right align-middle py-2">
                         {item.discount && item.discount.discountAmount > 0 ? (
@@ -582,34 +630,64 @@ export function BillDetailsDialog({ bill, isOpen, onClose }: BillDetailsDialogPr
             <div className="space-y-2">
               <h3 className="font-semibold">Bill Summary</h3>
               <div className="space-y-2 text-sm">
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Subtotal:</span>
-                  <span className="font-medium text-right">{formatCurrency(bill.subtotal)}</span>
-                </div>
-                {bill.totalDiscount > 0 && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Total Discount:</span>
-                    <span className="font-medium text-right text-green-600">-{formatCurrency(bill.totalDiscount)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between items-center">
-                  <span className="text-muted-foreground">Total Tax:</span>
-                  <span className="font-medium text-right">{formatCurrency(bill.totalTax)}</span>
-                </div>
-                {Math.abs(bill.roundOff) > 0.01 && (
-                  <div className="flex justify-between items-center">
-                    <span className="text-muted-foreground">Round Off:</span>
-                    <span className="font-medium text-right">
-                      {bill.roundOff > 0 ? "+" : ""}
-                      {formatCurrency(bill.roundOff)}
-                    </span>
-                  </div>
-                )}
-                <Separator />
-                <div className="flex justify-between items-center text-lg font-bold">
-                  <span>Grand Total:</span>
-                  <span className="text-right">{formatCurrency(bill.grandTotal)}</span>
-                </div>
+                {/* Calculate totals dynamically to match payment section */}
+                {(() => {
+                  const calculations = bill.items.reduce(
+                    (acc, item) => {
+                      const baseAmount = item.quantity * item.rate
+                      acc.subtotal += baseAmount
+                      acc.totalTax += item.taxAmount
+                      acc.totalDiscount += item.discount?.discountAmount || 0
+                      return acc
+                    },
+                    { subtotal: 0, totalTax: 0, totalDiscount: 0 },
+                  )
+                  
+                  const loyaltyDiscountAmount = bill.loyaltyDiscount?.discountAmount || 0
+                  // Calculate final total exactly like backend: (subtotal + totalTax) - loyaltyDiscount
+                  const backendGrandTotal = (calculations.subtotal + calculations.totalTax) - loyaltyDiscountAmount
+                  const roundOff = Math.round(backendGrandTotal) - backendGrandTotal
+                  const finalTotal = Math.round(backendGrandTotal)
+                  
+                  return (
+                    <>
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Subtotal:</span>
+                        <span className="font-medium text-right">{formatCurrency(calculations.subtotal)}</span>
+                      </div>
+                      {calculations.totalDiscount > 0 && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">Total Discount:</span>
+                          <span className="font-medium text-right text-green-600">-{formatCurrency(calculations.totalDiscount)}</span>
+                        </div>
+                      )}
+                      {loyaltyDiscountAmount > 0 && (
+                        <div className="flex justify-between items-center text-sm">
+                          <span className="text-muted-foreground">Loyalty Discount ({bill.loyaltyDiscount?.discountValue || 2}%):</span>
+                          <span className="font-medium text-right text-emerald-600">-{formatCurrency(loyaltyDiscountAmount)}</span>
+                        </div>
+                      )}
+                      <div className="flex justify-between items-center">
+                        <span className="text-muted-foreground">Total Tax:</span>
+                        <span className="font-medium text-right">{formatCurrency(calculations.totalTax)}</span>
+                      </div>
+                      {Math.abs(roundOff) > 0.01 && (
+                        <div className="flex justify-between items-center">
+                          <span className="text-muted-foreground">Round Off:</span>
+                          <span className="font-medium text-right">
+                            {roundOff > 0 ? "+" : ""}
+                            {formatCurrency(roundOff)}
+                          </span>
+                        </div>
+                      )}
+                      <Separator />
+                      <div className="flex justify-between items-center text-lg font-bold">
+                        <span>Grand Total:</span>
+                        <span className="text-right">{formatCurrency(finalTotal)}</span>
+                      </div>
+                    </>
+                  )
+                })()}
               </div>
             </div>
           </div>
@@ -666,6 +744,51 @@ export function BillDetailsDialog({ bill, isOpen, onClose }: BillDetailsDialogPr
                 <>
                   <Mail className="mr-2 h-4 w-4" />
                   Send Bill
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+
+    {/* WhatsApp Confirmation Dialog */}
+    <Dialog open={showWhatsAppDialog} onOpenChange={setShowWhatsAppDialog}>
+      <DialogContent className="max-w-md">
+        <DialogHeader>
+          <DialogTitle>Send Bill via WhatsApp</DialogTitle>
+          <DialogDescription>
+            Are you sure you want to send this bill to {bill?.customer?.name || 'the customer'} via WhatsApp?
+          </DialogDescription>
+        </DialogHeader>
+        <div className="space-y-4">
+          <div className="space-y-2">
+            <p className="text-sm text-muted-foreground">
+              The bill will be sent to: {bill?.customer?.phone || 'No phone number available'}
+            </p>
+          </div>
+          <div className="flex justify-end gap-2">
+            <Button
+              variant="outline"
+              onClick={() => setShowWhatsAppDialog(false)}
+              disabled={isSendingWhatsApp}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmSendWhatsApp}
+              disabled={isSendingWhatsApp}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              {isSendingWhatsApp ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Sending...
+                </>
+              ) : (
+                <>
+                  <MessageSquare className="mr-2 h-4 w-4" />
+                  Send via WhatsApp
                 </>
               )}
             </Button>

@@ -1,10 +1,10 @@
 "use client"
 
-import { useState, useCallback } from "react"
+import { useState, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ShoppingCart, RefreshCw, FileText, Wallet, MessageSquare } from "lucide-react"
+import { ShoppingCart, RefreshCw, FileText, Wallet, Gift, Star } from "lucide-react"
 import { ProductSearch } from "./product-search"
 import { BillingTable, type BillItem } from "./billing-table"
 import { BillingSummary } from "./billing-summary"
@@ -16,9 +16,21 @@ export function POSBilling() {
   const [billItems, setBillItems] = useState<BillItem[]>([])
   const [customerInfo, setCustomerInfo] = useState<CustomerInfoType>({ name: '', phone: '' })
   const [isProcessing, setIsProcessing] = useState(false)
-  const [isSendingWhatsApp, setIsSendingWhatsApp] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const [heldBills, setHeldBills] = useState<Array<{
+    id: string
+    billItems: BillItem[]
+    customerInfo: CustomerInfoType
+    heldAt: string
+    grandTotal: number
+  }>>([])
+  const [loyaltyStatus, setLoyaltyStatus] = useState<{
+    purchaseCount: number
+    isEligible: boolean
+    nextPurchaseForDiscount: number
+  } | null>(null)
+  const [isCheckingLoyalty, setIsCheckingLoyalty] = useState(false)
 
   const calculateItemTotals = useCallback((item: Omit<BillItem, "amount" | "taxAmount" | "totalAmount">) => {
     const baseAmount = item.quantity * item.rate
@@ -127,12 +139,133 @@ export function POSBilling() {
 
   const clearBill = () => {
     setBillItems([])
-    setCustomerInfo({ name: '', phone: '' })
+    setCustomerInfo({ name: '', phone: '', email: '', address: '', gstNumber: '' })
     setError("")
     setSuccess("")
   }
 
   const grandTotal = billItems.reduce((total, item) => total + item.totalAmount, 0)
+  
+  // Calculate loyalty discount for display (consistent with backend)
+  const calculations = billItems.reduce(
+    (acc, item) => {
+      const baseAmount = item.quantity * item.rate
+      acc.subtotal += baseAmount
+      acc.totalTax += item.taxAmount
+      acc.totalDiscount += item.discount?.discountAmount || 0
+      return acc
+    },
+    { subtotal: 0, totalTax: 0, totalDiscount: 0 },
+  )
+  
+  const loyaltyDiscountAmount = loyaltyStatus?.isEligible 
+    ? Math.round((calculations.subtotal + calculations.totalTax) * 0.02)
+    : 0
+  
+  // Calculate final total exactly like backend: (subtotal + totalTax) - loyaltyDiscount
+  const backendGrandTotal = (calculations.subtotal + calculations.totalTax) - loyaltyDiscountAmount
+  const roundOff = Math.round(backendGrandTotal) - backendGrandTotal
+  const finalGrandTotal = Math.round(backendGrandTotal)
+
+  // Check loyalty status when customer phone changes
+  const checkLoyaltyStatus = useCallback(async (phone: string) => {
+    if (!phone || phone.trim() === '') {
+      setLoyaltyStatus(null)
+      return
+    }
+
+    setIsCheckingLoyalty(true)
+    try {
+      const status = await apiClient.getCustomerLoyaltyStatus(phone)
+      setLoyaltyStatus(status)
+      console.log('🎯 Loyalty status checked:', status)
+    } catch (error) {
+      console.error('❌ Error checking loyalty status:', error)
+      setLoyaltyStatus(null)
+    } finally {
+      setIsCheckingLoyalty(false)
+    }
+  }, [])
+
+  // Check loyalty status when customer phone changes
+  useEffect(() => {
+    if (customerInfo.phone && customerInfo.phone.trim() !== '') {
+      const timeoutId = setTimeout(() => {
+        checkLoyaltyStatus(customerInfo.phone)
+      }, 500) // Debounce to avoid too many API calls
+
+      return () => clearTimeout(timeoutId)
+    } else {
+      setLoyaltyStatus(null)
+    }
+  }, [customerInfo.phone, checkLoyaltyStatus])
+
+  // Load held bills from localStorage on component mount
+  useEffect(() => {
+    const savedHeldBills = localStorage.getItem('heldBills')
+    console.log('🔍 Loading held bills from localStorage:', savedHeldBills)
+    if (savedHeldBills) {
+      try {
+        const parsed = JSON.parse(savedHeldBills)
+        console.log('✅ Parsed held bills:', parsed)
+        setHeldBills(parsed)
+      } catch (error) {
+        console.error('❌ Error parsing held bills:', error)
+      }
+    } else {
+      console.log('ℹ️ No held bills found in localStorage')
+    }
+  }, [])
+
+  // Save held bills to localStorage whenever they change
+  useEffect(() => {
+    console.log('💾 Saving held bills to localStorage:', heldBills)
+    localStorage.setItem('heldBills', JSON.stringify(heldBills))
+  }, [heldBills])
+
+  // Hold current bill
+  const holdBill = () => {
+    if (billItems.length === 0) {
+      setError('No items to hold')
+      return
+    }
+
+    const heldBill = {
+      id: Date.now().toString(),
+      billItems: [...billItems],
+      customerInfo: { ...customerInfo },
+      heldAt: new Date().toISOString(),
+      grandTotal: Math.round(finalGrandTotal)
+    }
+
+    console.log('📋 Holding bill:', heldBill)
+    setHeldBills(prev => {
+      const newHeldBills = [heldBill, ...prev]
+      console.log('📝 Updated held bills:', newHeldBills)
+      return newHeldBills
+    })
+    setSuccess(`Bill held successfully! (${billItems.length} items, ₹${heldBill.grandTotal.toLocaleString('en-IN')})`)
+    clearBill()
+  }
+
+  // Retrieve held bill
+  const retrieveHeldBill = (heldBillId: string) => {
+    const heldBill = heldBills.find(bill => bill.id === heldBillId)
+    if (!heldBill) {
+      setError('Held bill not found')
+      return
+    }
+
+    setBillItems(heldBill.billItems)
+    setCustomerInfo(heldBill.customerInfo)
+    setHeldBills(prev => prev.filter(bill => bill.id !== heldBillId))
+    setSuccess(`Held bill retrieved! (${heldBill.billItems.length} items, ₹${heldBill.grandTotal.toLocaleString('en-IN')})`)
+  }
+
+  // Delete held bill
+  const deleteHeldBill = (heldBillId: string) => {
+    setHeldBills(prev => prev.filter(bill => bill.id !== heldBillId))
+  }
 
   const handlePayment = async (paymentData: {
     cashTendered?: number
@@ -178,12 +311,12 @@ export function POSBilling() {
       if (paymentData.paymentMethod === "cash") {
         paymentBreakdown.push({
           method: "cash",
-          amount: paymentData.cashTendered || grandTotal
+          amount: paymentData.cashTendered || finalGrandTotal
         })
       } else if (paymentData.paymentMethod === "card") {
         paymentBreakdown.push({
           method: "card",
-          amount: grandTotal,
+          amount: finalGrandTotal,
           details: paymentData.razorpayDetails ? {
             razorpayPaymentId: paymentData.razorpayDetails.paymentId,
             razorpayOrderId: paymentData.razorpayDetails.orderId,
@@ -193,7 +326,7 @@ export function POSBilling() {
       } else if (paymentData.paymentMethod === "upi") {
         paymentBreakdown.push({
           method: "upi",
-          amount: grandTotal,
+          amount: finalGrandTotal,
           details: paymentData.razorpayDetails ? {
             razorpayPaymentId: paymentData.razorpayDetails.paymentId,
             razorpayOrderId: paymentData.razorpayDetails.orderId,
@@ -251,6 +384,7 @@ export function POSBilling() {
         paymentMethod: paymentData.paymentMethod,
         paymentDetails: Object.keys(paymentDetails).length > 0 ? paymentDetails : undefined,
         paymentBreakdown: paymentBreakdown.length > 0 ? paymentBreakdown : undefined,
+        applyLoyaltyDiscount: loyaltyStatus?.isEligible || false
       }
 
       const bill = await apiClient.createBill(billData)
@@ -259,14 +393,26 @@ export function POSBilling() {
       if (customerInfo.email && customerInfo.email.trim() !== '') {
         try {
           await apiClient.sendBillByEmail(bill._id, customerInfo.email)
-          setSuccess(`Bill ${bill.billNumber} created successfully and sent via email to ${customerInfo.email}!`)
+          let successMessage = `Bill ${bill.billNumber} created successfully and sent via email to ${customerInfo.email}!`
+          if (loyaltyStatus?.isEligible) {
+            successMessage += ` 🎉 2% Loyalty discount applied!`
+          }
+          setSuccess(successMessage)
         } catch (emailError) {
           console.error('Failed to send email:', emailError)
           // Still show success for bill creation, but note email failure
-          setSuccess(`Bill ${bill.billNumber} created successfully! (Email delivery failed)`)
+          let successMessage = `Bill ${bill.billNumber} created successfully! (Email delivery failed)`
+          if (loyaltyStatus?.isEligible) {
+            successMessage += ` 🎉 2% Loyalty discount applied!`
+          }
+          setSuccess(successMessage)
         }
       } else {
-        setSuccess(`Bill ${bill.billNumber} created successfully!`)
+        let successMessage = `Bill ${bill.billNumber} created successfully!`
+        if (loyaltyStatus?.isEligible) {
+          successMessage += ` 🎉 2% Loyalty discount applied!`
+        }
+        setSuccess(successMessage)
       }
       
       clearBill()
@@ -274,61 +420,6 @@ export function POSBilling() {
       setError(err instanceof Error ? err.message : "Failed to create bill")
     } finally {
       setIsProcessing(false)
-    }
-  }
-
-  const handleSendWhatsApp = async () => {
-    if (billItems.length === 0) {
-      setError("No items in the bill")
-      return
-    }
-
-    if (!customerInfo.phone || customerInfo.phone.trim() === '') {
-      setError("Customer phone number is required for WhatsApp")
-      return
-    }
-
-    setIsSendingWhatsApp(true)
-    setError("")
-
-    try {
-      // First create the bill
-      const billData = {
-        items: billItems.map((item) => ({
-          product: item.product._id,
-          size: item.variant.size,
-          quantity: item.quantity,
-          rate: item.rate,
-          taxRate: item.product.taxRate,
-          discount: item.discount ? {
-            discountId: item.discount.discountId,
-            discountName: item.discount.discountName,
-            discountType: item.discount.discountType,
-            discountValue: item.discount.discountValue,
-            discountAmount: item.discount.discountAmount
-          } : undefined
-        })),
-        customer: customerInfo,
-        paymentMethod: "cash" as const,
-        paymentStatus: "pending"
-      }
-
-      const bill = await apiClient.createBill(billData)
-      
-      // Send bill via WhatsApp
-      const result = await apiClient.sendBillViaWhatsApp(bill._id, customerInfo.phone)
-      
-      // Open WhatsApp URL in new window
-      if (result.whatsappUrl) {
-        window.open(result.whatsappUrl, '_blank')
-      }
-      
-      setSuccess(`Bill ${bill.billNumber} created successfully! WhatsApp opened for sending.`)
-      clearBill()
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to send bill via WhatsApp")
-    } finally {
-      setIsSendingWhatsApp(false)
     }
   }
 
@@ -371,18 +462,9 @@ export function POSBilling() {
                     <RefreshCw className="mr-2 h-4 w-4" />
                     Clear All
                   </Button>
-                  <Button variant="outline" disabled={billItems.length === 0}>
+                  <Button variant="outline" onClick={holdBill} disabled={billItems.length === 0}>
                     <FileText className="mr-2 h-4 w-4" />
                     Hold Bill
-                  </Button>
-                  <Button 
-                    variant="outline" 
-                    onClick={handleSendWhatsApp} 
-                    disabled={billItems.length === 0 || isSendingWhatsApp || !customerInfo.phone || customerInfo.phone.trim() === ''}
-                    className="text-green-600 hover:text-green-700 hover:bg-green-50"
-                  >
-                    <MessageSquare className="mr-2 h-4 w-4" />
-                    {isSendingWhatsApp ? "Sending..." : "WhatsApp"}
                   </Button>
                 </div>
               </div>
@@ -408,6 +490,50 @@ export function POSBilling() {
                   })
                 }} 
               />
+              
+              {/* Loyalty Status Indicator */}
+              {isCheckingLoyalty && (
+                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                  <div className="flex items-center gap-2">
+                    <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                    <span className="text-sm text-blue-700">Checking loyalty status...</span>
+                  </div>
+                </div>
+              )}
+              
+              {loyaltyStatus && !isCheckingLoyalty && (
+                <div className={`mt-2 p-3 rounded-lg border ${
+                  loyaltyStatus.isEligible 
+                    ? 'bg-green-50 border-green-200' 
+                    : 'bg-amber-50 border-amber-200'
+                }`}>
+                  <div className="flex items-center gap-2">
+                    {loyaltyStatus.isEligible ? (
+                      <>
+                        <Gift className="h-4 w-4 text-green-600" />
+                        <div>
+                          <p className="text-sm font-medium text-green-800">🎉 Loyalty Discount Available!</p>
+                          <p className="text-xs text-green-700">2% discount will be applied on this purchase</p>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <Star className="h-4 w-4 text-amber-600" />
+                        <div>
+                          <p className="text-sm font-medium text-amber-800">Loyalty Status</p>
+                          <p className="text-xs text-amber-700">
+                            {loyaltyStatus.purchaseCount} purchases made • 
+                            {loyaltyStatus.nextPurchaseForDiscount > 0 
+                              ? `${loyaltyStatus.nextPurchaseForDiscount} more purchase${loyaltyStatus.nextPurchaseForDiscount > 1 ? 's' : ''} for 2% discount`
+                              : 'Next purchase eligible for discount!'
+                            }
+                          </p>
+                        </div>
+                      </>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Items Billing Table - Scrollable */}
@@ -444,7 +570,7 @@ export function POSBilling() {
                   </CardTitle>
                 </CardHeader>
                 <CardContent className="pt-0">
-                  <BillingSummary items={billItems} />
+                  <BillingSummary items={billItems} loyaltyStatus={loyaltyStatus} />
                 </CardContent>
               </Card>
             </div>
@@ -458,20 +584,81 @@ export function POSBilling() {
                       <Wallet className="h-5 w-5" />
                       Payment
                       <span className="ml-auto text-sm bg-primary/10 text-primary px-2 py-1 rounded-full">
-                        ₹{Math.round(grandTotal).toLocaleString('en-IN')}
+                        ₹{Math.round(finalGrandTotal).toLocaleString('en-IN')}
                       </span>
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <PaymentSection grandTotal={Math.round(grandTotal)} onPayment={handlePayment} isProcessing={isProcessing} />
+                    <PaymentSection grandTotal={Math.round(finalGrandTotal)} onPayment={handlePayment} isProcessing={isProcessing} />
                   </CardContent>
                 </Card>
               </div>
             )}
             
             {/* Scrollable Content Area (if needed in future) */}
-            <div className="flex-1 overflow-y-auto p-4">
-              {/* Additional content can go here if needed */}
+            <div className="flex-1 overflow-y-auto p-4 space-y-4">
+              {/* Held Bills Section - Only show when no items and no payment section */}
+              {billItems.length === 0 && (
+                <Card className="bg-gradient-to-br from-background to-muted/30 shadow-sm">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-lg flex items-center gap-2">
+                      <FileText className="h-5 w-5" />
+                      Held Bills
+                      <span className="ml-auto text-sm bg-primary/10 text-primary px-2 py-1 rounded-full">
+                        {heldBills.length} held
+                      </span>
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="pt-0 space-y-2">
+                    {heldBills.length > 0 ? (
+                      heldBills.map((heldBill) => (
+                        <div key={heldBill.id} className="p-3 border rounded-lg bg-background/50 hover:bg-background transition-colors">
+                          <div className="flex items-center justify-between mb-2">
+                            <div className="flex items-center gap-2">
+                              <span className="text-sm font-medium">{heldBill.billItems.length} items</span>
+                              <span className="text-sm text-muted-foreground">•</span>
+                              <span className="text-sm font-semibold text-primary">₹{heldBill.grandTotal.toLocaleString('en-IN')}</span>
+                            </div>
+                            <div className="flex items-center gap-1">
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => retrieveHeldBill(heldBill.id)}
+                                className="h-7 px-2 text-xs"
+                              >
+                                Retrieve
+                              </Button>
+                              <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => deleteHeldBill(heldBill.id)}
+                                className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                              >
+                                ×
+                              </Button>
+                            </div>
+                          </div>
+                          {heldBill.customerInfo.name && (
+                            <div className="text-xs text-muted-foreground">
+                              Customer: {heldBill.customerInfo.name}
+                              {heldBill.customerInfo.phone && ` • ${heldBill.customerInfo.phone}`}
+                            </div>
+                          )}
+                          <div className="text-xs text-muted-foreground mt-1">
+                            Held: {new Date(heldBill.heldAt).toLocaleString()}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="text-center py-8 text-muted-foreground">
+                        <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                        <p className="text-sm">No held bills yet</p>
+                        <p className="text-xs mt-1">Add items to a bill and click "Hold Bill" to save it here</p>
+                      </div>
+                    )}
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
         </CardContent>
