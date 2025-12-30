@@ -2,7 +2,7 @@
 
 import { createContext, useContext, useState, ReactNode } from "react"
 
-export type Language = "en" | "ta"
+export type Language = "en" | "ta" | "bilingual"
 
 interface LanguageContextType {
   language: Language
@@ -56,6 +56,29 @@ const translations = {
     "please_visit_again": "மீண்டும் வருகையிடுங்கள்",
     "paid": "*** செலுத்தப்பட்டது ***",
     "walk_in_customer": "நேரடி வாடிக்கையாளர்"
+  },
+  bilingual: {
+    // Bilingual - return English for UI (PDF handles bilingual separately)
+    "supermarket_store": "SUPERMARKET STORE",
+    "bill": "BILL",
+    "date": "DATE",
+    "cashier": "CASHIER",
+    "customer": "CUSTOMER",
+    "phone": "PHONE",
+    "email": "EMAIL",
+    "items": "ITEMS",
+    "subtotal": "SUBTOTAL",
+    "loyalty_discount": "LOYALTY DISCOUNT",
+    "total_tax": "TOTAL TAX",
+    "round_off": "ROUND OFF",
+    "total": "TOTAL",
+    "payment_method": "PAYMENT METHOD",
+    "cash_tendered": "CASH TENDERED",
+    "change": "CHANGE",
+    "thank_you": "THANK YOU FOR YOUR PURCHASE!",
+    "please_visit_again": "PLEASE VISIT AGAIN",
+    "paid": "*** PAID ***",
+    "walk_in_customer": "Walk-in Customer"
   }
 }
 

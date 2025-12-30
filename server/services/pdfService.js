@@ -20,18 +20,29 @@ const generateBillPDF = async (bill, language = 'en') => {
     // Generate HTML template for the bill
     const htmlTemplate = generateBillHTML(bill, language);
     
-    // Launch Puppeteer browser
+    // Launch Puppeteer browser with new headless mode and additional args for font support
     const browser = await puppeteer.launch({
-      headless: true,
-      args: ['--no-sandbox', '--disable-setuid-sandbox']
+      headless: "new",
+      args: [
+        '--no-sandbox', 
+        '--disable-setuid-sandbox',
+        '--disable-font-subpixel-positioning',
+        '--disable-gpu',
+        '--font-render-hinting=none',
+        '--disable-web-security',
+        '--disable-features=VizDisplayCompositor'
+      ]
     });
     
     const page = await browser.newPage();
     
-    // Set HTML content
+    // Set HTML content and wait for fonts to load
     await page.setContent(htmlTemplate, {
-      waitUntil: 'networkidle0'
+      waitUntil: ['networkidle0', 'domcontentloaded']
     });
+    
+    // Wait a bit more for fonts to load properly
+    await page.waitForTimeout(2000);
     
     // Generate PDF with thermal receipt dimensions
     const pdfBuffer = await page.pdf({
@@ -60,7 +71,7 @@ const generateBillPDF = async (bill, language = 'en') => {
 
 // Generate HTML template for the bill
 const generateBillHTML = (bill, language = 'en') => {
-  // Translation function
+  // Translation function with bilingual support
   const t = (key) => {
     const translations = {
       en: {
@@ -108,7 +119,21 @@ const generateBillHTML = (bill, language = 'en') => {
         walk_in_customer: "நேரடி வாடிக்கையாளர்"
       }
     };
-    return translations[language][key] || key;
+    
+    const englishText = translations.en[key] || key;
+    const tamilText = translations.ta[key] || key;
+    
+    if (language === 'bilingual') {
+      // Return both English and Tamil
+      return `<div class="bilingual">
+        <div class="english">${englishText}</div>
+        <div class="tamil">${tamilText}</div>
+      </div>`;
+    } else if (language === 'ta') {
+      return tamilText;
+    } else {
+      return englishText;
+    }
   };
   const formatCurrency = (amount) => {
     return new Intl.NumberFormat('en-IN', {
@@ -263,8 +288,9 @@ ${'='.repeat(32)}
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
       <title>Bill ${bill.billNumber}</title>
-      <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;700&family=Courier+New:wght@400;700&display=swap" rel="stylesheet">
       <style>
+        @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+Tamil:wght@400;700&family=Courier+New:wght@400;700&display=swap');
+        
         * {
           margin: 0;
           padding: 0;
@@ -283,13 +309,40 @@ ${'='.repeat(32)}
           white-space: pre;
           letter-spacing: 0.2px;
           font-weight: normal;
-          direction: ${language === 'ta' ? 'ltr' : 'ltr'};
+          direction: ltr;
+        }
+        
+        /* Bilingual support - show both English and Tamil */
+        .bilingual {
+          display: flex;
+          flex-direction: column;
+          line-height: 1.1;
+        }
+        
+        .tamil {
+          font-family: 'Noto Sans Tamil', sans-serif;
+          font-size: 9px;
+          color: #333;
+        }
+        
+        .english {
+          font-family: 'Courier New', monospace;
+          font-size: 8px;
+          color: #666;
         }
         
         @media print {
           body {
             margin: 0;
             padding: 0;
+          }
+          
+          .tamil {
+            font-size: 8px;
+          }
+          
+          .english {
+            font-size: 7px;
           }
         }
       </style>

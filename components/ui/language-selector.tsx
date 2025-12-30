@@ -25,6 +25,13 @@ export function LanguageSelector() {
         >
           தமிழ்
         </Button>
+        <Button
+          variant={language === "bilingual" ? "default" : "outline"}
+          size="sm"
+          onClick={() => setLanguage("bilingual")}
+        >
+          Both
+        </Button>
       </div>
     </div>
   )
