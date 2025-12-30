@@ -206,8 +206,11 @@ class ApiClient {
 
 
   // Generate PDF for a bill
-  async generateBillPDF(billId: string): Promise<Blob> {
-    const response = await fetch(`${API_BASE_URL}/bills/${billId}/pdf`, {
+  async generateBillPDF(billId: string, language: string = 'en'): Promise<Blob> {
+    const searchParams = new URLSearchParams()
+    searchParams.append('language', language)
+    
+    const response = await fetch(`${API_BASE_URL}/bills/${billId}/pdf?${searchParams.toString()}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${authService.getToken()}`

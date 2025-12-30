@@ -416,6 +416,7 @@ router.post("/:id/send-email", auth, async (req, res) => {
  */
 router.get("/:id/pdf", auth, async (req, res) => {
   try {
+    const { language = 'en' } = req.query;
     const bill = await Bill.findById(req.params.id).populate("items.product");
     
     if (!bill) {
@@ -444,15 +445,16 @@ router.get("/:id/pdf", auth, async (req, res) => {
       loyaltyDiscount: bill.loyaltyDiscount,
       subtotal: bill.subtotal,
       totalTax: bill.totalTax,
-      grandTotal: bill.grandTotal
+      grandTotal: bill.grandTotal,
+      language: language
     }, null, 2));
     
-    // Generate PDF
-    const pdfBuffer = await generateBillPDF(transformedBill);
+    // Generate PDF with language
+    const pdfBuffer = await generateBillPDF(transformedBill, language);
     
     // Set response headers for PDF download
     res.setHeader('Content-Type', 'application/pdf');
-    res.setHeader('Content-Disposition', `attachment; filename="bill_${bill.billNumber}.pdf"`);
+    res.setHeader('Content-Disposition', `attachment; filename="bill_${bill.billNumber}_${language}.pdf"`);
     res.setHeader('Content-Length', pdfBuffer.length);
     
     // Send the PDF buffer

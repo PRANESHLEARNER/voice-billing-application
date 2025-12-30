@@ -13,6 +13,7 @@ import { Separator } from "@/components/ui/separator"
 import { FileText, Printer, Download, X, Mail, Loader2, MessageSquare } from "lucide-react"
 import type { Bill } from "@/lib/api"
 import { sendBillByEmail, sendBillViaWhatsApp } from "@/lib/api"
+import { useLanguage } from "@/contexts/language-context"
 
 interface BillDetailsDialogProps {
   bill: Bill | null
@@ -23,6 +24,7 @@ interface BillDetailsDialogProps {
 export function BillDetailsDialog({ bill, isOpen, onClose }: BillDetailsDialogProps) {
   if (!bill) return null
 
+  const { language } = useLanguage()
   const [isSendingEmail, setIsSendingEmail] = useState(false)
   const [emailInput, setEmailInput] = useState(bill.customer?.email || "")
   const [showEmailDialog, setShowEmailDialog] = useState(false)
@@ -80,8 +82,8 @@ export function BillDetailsDialog({ bill, isOpen, onClose }: BillDetailsDialogPr
       // Import the API client
       const { apiClient } = await import("@/lib/api")
       
-      // Generate PDF using the backend service
-      const pdfBlob = await apiClient.generateBillPDF(bill._id)
+      // Generate PDF using the backend service with current language
+      const pdfBlob = await apiClient.generateBillPDF(bill._id, language)
       
       // Create a blob URL for the PDF
       const blobUrl = window.URL.createObjectURL(pdfBlob)
@@ -89,7 +91,7 @@ export function BillDetailsDialog({ bill, isOpen, onClose }: BillDetailsDialogPr
       // Create a temporary link element to trigger download
       const link = document.createElement('a')
       link.href = blobUrl
-      link.download = `bill_${bill.billNumber}.pdf`
+      link.download = `bill_${bill.billNumber}_${language}.pdf`
       document.body.appendChild(link)
       
       // Trigger the download
