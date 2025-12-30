@@ -4,7 +4,7 @@ require("dotenv").config({ path: ".env.local" });
 const connectDB = async () => {
   try {
     const conn = await mongoose.connect(
-      process.env.MONGODB_URI || "mongodb+srv://praneshs616_db_user:Praneshise@super-market.6ggio21.mongodb.net/"
+      "mongodb+srv://praneshs616_db_user:Praneshise@super-market.6ggio21.mongodb.net/"
     );
     console.log(`MongoDB Connected: ${conn.connection.host}`);
     return conn; // Return the connection object
