@@ -155,23 +155,41 @@ const generateBillHTML = (bill, language = 'en') => {
     });
   };
 
+  // Helper function to get display width of string (handles Tamil characters)
+  const getDisplayWidth = (str) => {
+    // Tamil characters generally take 1.5x the width of English characters
+    // This is a simplified approach - in production, you might want a more sophisticated method
+    const tamilRegex = /[\u0B80-\u0BFF]/;
+    let width = 0;
+    for (let char of str) {
+      if (tamilRegex.test(char)) {
+        width += 1.5; // Tamil characters are wider
+      } else {
+        width += 1; // English and other characters
+      }
+    }
+    return width;
+  };
+
   // Helper function to pad strings for receipt alignment
   const padRight = (str, length) => {
-    return str + ' '.repeat(Math.max(0, length - str.length));
+    const displayWidth = getDisplayWidth(str);
+    const paddingNeeded = Math.max(0, length - displayWidth);
+    return str + ' '.repeat(Math.ceil(paddingNeeded));
   };
 
   const padLeft = (str, length) => {
-    return ' '.repeat(Math.max(0, length - str.length)) + str;
+    const displayWidth = getDisplayWidth(str);
+    const paddingNeeded = Math.max(0, length - displayWidth);
+    return ' '.repeat(Math.ceil(paddingNeeded)) + str;
   };
 
   // Helper function to center text
-
-
-  
   const centerText = (str, width) => {
-    const padding = Math.max(0, width - str.length);
-    const leftPad = Math.floor(padding / 2);
-    const rightPad = padding - leftPad;
+    const displayWidth = getDisplayWidth(str);
+    const paddingNeeded = Math.max(0, width - displayWidth);
+    const leftPad = Math.floor(paddingNeeded / 2);
+    const rightPad = paddingNeeded - leftPad;
     return ' '.repeat(leftPad) + str + ' '.repeat(rightPad);
   };
 
@@ -302,35 +320,42 @@ ${'='.repeat(32)}
         body {
           font-family: ${language === 'ta' ? "'Noto Sans Tamil', 'Courier New', monospace" : "'Courier New', monospace"};
           font-size: ${language === 'ta' ? '10px' : '9px'};
-          line-height: 1.2;
+          line-height: 1.3;
           background: white;
           color: black;
           padding: 2px;
           max-width: 288px;
           margin: 0 auto;
           white-space: pre;
-          letter-spacing: 0.2px;
+          letter-spacing: ${language === 'ta' ? '0.1px' : '0.2px'};
           font-weight: normal;
           direction: ltr;
+          text-rendering: optimizeLegibility;
+          -webkit-font-smoothing: antialiased;
+          -moz-osx-font-smoothing: grayscale;
         }
         
         /* Bilingual support - show both English and Tamil */
         .bilingual {
           display: flex;
           flex-direction: column;
-          line-height: 1.1;
+          line-height: 1.2;
+          margin: 2px 0;
         }
         
         .tamil {
           font-family: 'Noto Sans Tamil', sans-serif;
-          font-size: 9px;
+          font-size: 8px;
           color: #333;
+          font-weight: 500;
+          text-rendering: optimizeLegibility;
         }
         
         .english {
           font-family: 'Courier New', monospace;
-          font-size: 8px;
+          font-size: 7px;
           color: #666;
+          font-weight: normal;
         }
         
         @media print {
