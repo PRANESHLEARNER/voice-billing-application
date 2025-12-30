@@ -417,6 +417,9 @@ router.post("/:id/send-email", auth, async (req, res) => {
 router.get("/:id/pdf", auth, async (req, res) => {
   try {
     const { language = 'en' } = req.query;
+    console.log('🔍 Backend: Language query parameter received:', language);
+    console.log('🔍 Backend: Full query params:', req.query);
+    
     const bill = await Bill.findById(req.params.id).populate("items.product");
     
     if (!bill) {

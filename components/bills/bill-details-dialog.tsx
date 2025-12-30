@@ -79,6 +79,9 @@ export function BillDetailsDialog({ bill, isOpen, onClose }: BillDetailsDialogPr
 
   const handleDownload = async () => {
     try {
+      console.log('🌍 Current language from context:', language);
+      console.log('🔍 Language type:', typeof language);
+      
       // Import the API client
       const { apiClient } = await import("@/lib/api")
       

@@ -6,6 +6,8 @@ const path = require('path');
 const generateBillPDF = async (bill, language = 'en') => {
   try {
     console.log('📄 Starting PDF generation for bill:', bill.billNumber, 'Language:', language);
+    console.log('🌍 Language parameter received:', language);
+    console.log('🔍 Language type:', typeof language);
     console.log('📋 Bill data structure:', JSON.stringify({
       billNumber: bill.billNumber,
       hasDiscount: !!bill.discount,
