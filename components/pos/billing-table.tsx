@@ -16,6 +16,7 @@ export interface BillItem {
   amount: number
   taxAmount: number
   totalAmount: number
+  source?: "manual" | "voice"
   discount?: {
     discountId: string
     discountName: string

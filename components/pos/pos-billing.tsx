@@ -2,18 +2,93 @@
 
 import { useState, useCallback, useEffect } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
-import { ShoppingCart, RefreshCw, FileText, Wallet, Gift, Star } from "lucide-react"
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
+import { ShoppingCart, RefreshCw, FileText, Wallet, Gift, Star, Loader2, Check, Sparkles } from "lucide-react"
 import { ProductSearch } from "./product-search"
 import { BillingTable, type BillItem } from "./billing-table"
 import { BillingSummary } from "./billing-summary"
 import { PaymentSection } from "./payment-section"
 import { CustomerInfo } from "./customer-info"
+import { VoiceControls } from "./voice-controls"
 import { LanguageSelector } from "@/components/ui/language-selector"
 import { apiClient, type Product, type ProductVariant, type CustomerInfo as CustomerInfoType } from "@/lib/api"
+import { featureFlags } from "@/lib/feature-flags"
+import { parseVoiceCommand, type VoiceAction } from "@/lib/voice-parser"
+import { useToast } from "@/hooks/use-toast"
+
+const VOICE_CONFIDENCE_THRESHOLD = 0.55
+const MAX_VOICE_SUGGESTIONS = 3
+const AUTO_APPLY_SUGGESTION_SCORE = 0.65
+const MIN_SUGGESTION_SCORE = 0.3
+const MIN_REMOVE_MATCH_SCORE = 0.35
+
+function normalizeVoiceText(value?: string) {
+  if (!value) return ""
+  return value
+    .toLowerCase()
+    .normalize("NFKD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^\p{L}\p{N}\s]/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim()
+}
+
+function computeVoiceMatchScore(product: Product, variant: ProductVariant, normalizedTerms: string) {
+  if (!normalizedTerms) return 0
+  const termTokens = normalizedTerms.split(" ").filter(Boolean)
+  if (termTokens.length === 0) return 0
+
+  const candidates = [
+    product.name,
+    product.code,
+    product.category,
+    variant.size,
+    variant.sku,
+    variant.barcode,
+  ]
+
+  let bestScore = 0
+  for (const candidate of candidates) {
+    const normalizedCandidate = normalizeVoiceText(candidate)
+    if (!normalizedCandidate) continue
+
+    if (normalizedCandidate === normalizedTerms) {
+      bestScore = Math.max(bestScore, 1)
+      continue
+    }
+    if (normalizedCandidate.includes(normalizedTerms) || normalizedTerms.includes(normalizedCandidate)) {
+      bestScore = Math.max(bestScore, 0.85)
+      continue
+    }
+
+    const overlap =
+      termTokens.filter((token) => normalizedCandidate.includes(token)).length / termTokens.length
+    if (overlap > 0) {
+      bestScore = Math.max(bestScore, overlap * 0.8)
+    }
+  }
+
+  return bestScore
+}
+
+function computeBillItemMatch(item: BillItem, normalizedTerms: string) {
+  return computeVoiceMatchScore(item.product, item.variant, normalizedTerms)
+}
+
+interface VoiceSuggestion {
+  id: string
+  product: Product
+  variant: ProductVariant
+  quantity: number
+  action: VoiceAction
+  transcript: string
+  score: number
+}
 
 export function POSBilling() {
+  const { toast } = useToast()
   const [billItems, setBillItems] = useState<BillItem[]>([])
   const [customerInfo, setCustomerInfo] = useState<CustomerInfoType>({ name: '', phone: '' })
   const [isProcessing, setIsProcessing] = useState(false)
@@ -32,6 +107,10 @@ export function POSBilling() {
     nextPurchaseForDiscount: number
   } | null>(null)
   const [isCheckingLoyalty, setIsCheckingLoyalty] = useState(false)
+  const [lastVoiceCommand, setLastVoiceCommand] = useState<string>("")
+  const [voiceSuggestions, setVoiceSuggestions] = useState<VoiceSuggestion[]>([])
+  const [isVoiceProcessing, setIsVoiceProcessing] = useState(false)
+  const voiceEnabled = featureFlags.voiceBilling
 
   const calculateItemTotals = useCallback((item: Omit<BillItem, "amount" | "taxAmount" | "totalAmount">) => {
     const baseAmount = item.quantity * item.rate
@@ -62,7 +141,13 @@ export function POSBilling() {
     }
   }, [])
 
-  const addProduct = async (product: Product, variant: ProductVariant) => {
+  const addProduct = async (
+    product: Product,
+    variant: ProductVariant,
+    options: { quantity?: number; source?: "manual" | "voice" } = {}
+  ) => {
+    const quantityToAdd = Math.max(1, options.quantity ?? 1)
+    const source = options.source ?? "manual"
     // Fetch applicable discounts for this product
     let bestDiscount = null
     try {
@@ -95,7 +180,7 @@ export function POSBilling() {
       const existingItem = billItems[existingItemIndex]
       const updatedItem = calculateItemTotals({
         ...existingItem,
-        quantity: existingItem.quantity + 1,
+        quantity: existingItem.quantity + quantityToAdd,
         // Keep the existing discount, don't fetch new one
         discount: existingItem.discount
       })
@@ -107,8 +192,9 @@ export function POSBilling() {
         id: `${product._id}-${variant.sku || variant.size}-${Date.now()}`,
         product,
         variant,
-        quantity: 1,
+        quantity: quantityToAdd,
         rate: variant.price,
+        source,
         discount: bestDiscount ? {
           discountId: bestDiscount._id,
           discountName: bestDiscount.name,
@@ -144,6 +230,7 @@ export function POSBilling() {
     setError("")
     setSuccess("")
   }
+
 
   const grandTotal = billItems.reduce((total, item) => total + item.totalAmount, 0)
   
@@ -267,6 +354,240 @@ export function POSBilling() {
   const deleteHeldBill = (heldBillId: string) => {
     setHeldBills(prev => prev.filter(bill => bill.id !== heldBillId))
   }
+
+  const tryRemoveVoiceItem = useCallback(
+    (terms?: string): boolean => {
+      if (!terms) return false
+      const normalizedTerms = normalizeVoiceText(terms)
+      if (!normalizedTerms) return false
+
+      let bestMatch: { item: BillItem; score: number } | null = null
+      for (const item of billItems) {
+        const score = computeBillItemMatch(item, normalizedTerms)
+        if (!bestMatch || score > bestMatch.score) {
+          bestMatch = { item, score }
+        }
+      }
+
+      if (bestMatch && bestMatch.score >= MIN_REMOVE_MATCH_SCORE) {
+        removeItem(bestMatch.item.id)
+        toast({
+          title: "Voice removal",
+          description: `${bestMatch.item.product.name} (${bestMatch.item.variant.size}) removed`,
+        })
+        return true
+      }
+
+      return false
+    },
+    [billItems, removeItem, toast],
+  )
+
+  const applyVoiceSuggestion = useCallback(
+    async (suggestion: VoiceSuggestion, options: { skipSpinner?: boolean } = {}) => {
+      if (!options.skipSpinner) {
+        setIsVoiceProcessing(true)
+      }
+
+      try {
+        if (suggestion.action === "add") {
+          await addProduct(suggestion.product, suggestion.variant, {
+            quantity: suggestion.quantity,
+            source: "voice",
+          })
+          toast({
+            title: "Voice item added",
+            description: `${suggestion.quantity} × ${suggestion.product.name} (${suggestion.variant.size})`,
+          })
+        }
+        setVoiceSuggestions((prev) => prev.filter((entry) => entry.id !== suggestion.id))
+      } catch (err) {
+        console.error("Voice suggestion apply failed", err)
+        toast({
+          title: "Voice action failed",
+          description: "Unable to apply the suggested product. Please try again.",
+          variant: "destructive",
+        })
+      } finally {
+        if (!options.skipSpinner) {
+          setIsVoiceProcessing(false)
+        }
+      }
+    },
+    [addProduct, toast],
+  )
+
+  const handleVoiceTranscript = useCallback(
+    async (text: string, confidence: number) => {
+      if (!voiceEnabled) return
+      const trimmed = text.trim()
+      if (!trimmed) return
+
+      setLastVoiceCommand(trimmed)
+
+      if (confidence < VOICE_CONFIDENCE_THRESHOLD) {
+        toast({
+          title: "Voice confidence low",
+          description: "Could not confidently detect the product. Please speak again clearly.",
+        })
+        return
+      }
+
+      setIsVoiceProcessing(true)
+      setVoiceSuggestions([])
+
+      try {
+        const parsed = parseVoiceCommand(trimmed)
+        const quantity = Math.max(1, parsed.quantity ?? 1)
+
+        if (parsed.action === "hold") {
+          holdBill()
+          toast({
+            title: "Bill held",
+            description: "Current bill moved to held bills via voice command.",
+          })
+          return
+        }
+
+        if (parsed.action === "clear") {
+          if (billItems.length === 0) {
+            toast({
+              title: "Nothing to clear",
+              description: "No items in the bill currently.",
+            })
+          } else {
+            clearBill()
+            toast({
+              title: "Bill cleared",
+              description: "All items removed from the bill via voice.",
+            })
+          }
+          return
+        }
+
+        if (parsed.action === "remove") {
+          const removed = tryRemoveVoiceItem(parsed.terms)
+          if (!removed) {
+            toast({
+              title: "No matching item",
+              description: "Could not match a billed item to remove.",
+              variant: "destructive",
+            })
+          }
+          return
+        }
+
+        const terms = parsed.terms
+        if (!terms) {
+          toast({
+            title: "Product not detected",
+            description: "Please include the product name in your voice command.",
+          })
+          return
+        }
+
+        const normalizedTerms = normalizeVoiceText(terms)
+        if (!normalizedTerms) {
+          toast({
+            title: "Product not detected",
+            description: "Please include the product name in your voice command.",
+          })
+          return
+        }
+
+        let products: Product[] = []
+        try {
+          products = await apiClient.getProducts({ search: terms, active: true })
+        } catch (err) {
+          console.error("Voice lookup failed", err)
+        }
+
+        if (products.length === 0) {
+          try {
+            const fallbackProduct = await apiClient.getProductByIdentifier(terms)
+            if (fallbackProduct) {
+              products = [fallbackProduct]
+            }
+          } catch {
+            // ignore - fallback best effort
+          }
+        }
+
+        const suggestions: VoiceSuggestion[] = []
+        for (const product of products) {
+          const variants: ProductVariant[] =
+            product.variants && product.variants.length > 0
+              ? product.variants
+              : [
+                  {
+                    size: "Default",
+                    price: product.basePrice ?? 0,
+                    cost: product.baseCost ?? 0,
+                    stock: 0,
+                    sku: product.code,
+                    isActive: true,
+                  },
+                ]
+
+          for (const variant of variants) {
+            if (variant.isActive === false) continue
+            const matchScore = computeVoiceMatchScore(product, variant, normalizedTerms)
+            if (matchScore <= 0) continue
+
+            const combinedScore = Math.min(1, matchScore * 0.7 + confidence * 0.3)
+            if (combinedScore < MIN_SUGGESTION_SCORE) continue
+
+            suggestions.push({
+              id: `${product._id}-${variant.sku || variant.size}-${Date.now()}-${Math.random()}`,
+              product,
+              variant,
+              quantity,
+              action: parsed.action,
+              transcript: trimmed,
+              score: combinedScore,
+            })
+          }
+        }
+
+        suggestions.sort((a, b) => b.score - a.score)
+        const limitedSuggestions = suggestions.slice(0, MAX_VOICE_SUGGESTIONS)
+
+        if (limitedSuggestions.length === 0) {
+          toast({
+            title: "No similar products",
+            description: "Could not find products matching your voice command.",
+          })
+          return
+        }
+
+        setVoiceSuggestions(limitedSuggestions)
+
+        const topSuggestion = limitedSuggestions[0]
+        if (topSuggestion.score >= AUTO_APPLY_SUGGESTION_SCORE) {
+          await applyVoiceSuggestion(topSuggestion, { skipSpinner: true })
+          toast({
+            title: "Voice match added",
+            description: `${topSuggestion.quantity} × ${topSuggestion.product.name} added automatically.`,
+          })
+        } else {
+          toast({
+            title: "Voice suggestions ready",
+            description: "Review the suggested products below and tap apply.",
+          })
+        }
+      } catch (err) {
+        console.error("Voice transcript handling failed", err)
+        toast({
+          title: "Voice processing failed",
+          description: "Could not process the voice command. Please retry.",
+          variant: "destructive",
+        })
+      } finally {
+        setIsVoiceProcessing(false)
+      }
+    },
+    [voiceEnabled, toast, holdBill, billItems, clearBill, tryRemoveVoiceItem, applyVoiceSuggestion],
+  )
 
   const handlePayment = async (paymentData: {
     cashTendered?: number
@@ -453,7 +774,7 @@ export function POSBilling() {
             )}
 
             {/* Product Search with Action Buttons */}
-            <div className="flex-shrink-0">
+            <div className="flex-shrink-0 space-y-4">
               <div className="flex gap-3 items-end">
                 <div className="flex-1">
                   <ProductSearch onProductSelect={addProduct} />
@@ -472,6 +793,15 @@ export function POSBilling() {
                   <LanguageSelector />
                 </div>
               </div>
+
+              {voiceEnabled && (
+                <VoiceControls onTranscript={handleVoiceTranscript} />
+              )}
+              {voiceEnabled && lastVoiceCommand && (
+                <div className="text-xs text-muted-foreground">
+                  Last voice command: <span className="font-medium text-foreground">{lastVoiceCommand}</span>
+                </div>
+              )}
             </div>
 
             {/* Customer Information */}
