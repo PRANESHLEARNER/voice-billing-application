@@ -17,12 +17,17 @@ import { apiClient, type Product, type ProductVariant, type CustomerInfo as Cust
 import { featureFlags } from "@/lib/feature-flags"
 import { parseVoiceCommand, type VoiceAction } from "@/lib/voice-parser"
 import { useToast } from "@/hooks/use-toast"
+import { VOICE_SYNONYMS } from "@/lib/voice-synonyms"
 
 const VOICE_CONFIDENCE_THRESHOLD = 0.55
 const MAX_VOICE_SUGGESTIONS = 3
 const AUTO_APPLY_SUGGESTION_SCORE = 0.65
 const MIN_SUGGESTION_SCORE = 0.3
 const MIN_REMOVE_MATCH_SCORE = 0.35
+const NORMALIZED_SYNONYMS = VOICE_SYNONYMS.map((entry) => ({
+  canonical: normalizeVoiceText(entry.canonical),
+  matchers: entry.matchers.map((value) => normalizeVoiceText(value)).filter(Boolean),
+}))
 
 function normalizeVoiceText(value?: string) {
   if (!value) return ""
@@ -75,6 +80,39 @@ function computeVoiceMatchScore(product: Product, variant: ProductVariant, norma
 
 function computeBillItemMatch(item: BillItem, normalizedTerms: string) {
   return computeVoiceMatchScore(item.product, item.variant, normalizedTerms)
+}
+
+function expandVoiceTermVariants(rawTerms: string) {
+  const normalized = normalizeVoiceText(rawTerms)
+  const variantSet = new Set<string>()
+  const matchedCanonicals = new Set<string>()
+  if (normalized) {
+    variantSet.add(normalized)
+  }
+
+  for (const entry of NORMALIZED_SYNONYMS) {
+    if (!entry.canonical) continue
+    if (entry.matchers.some((matcher) => matcher && normalized.includes(matcher))) {
+      matchedCanonicals.add(entry.canonical)
+      variantSet.add(entry.canonical)
+    }
+  }
+
+  // Also split on conjunctions like "and"
+  if (normalized.includes(" and ")) {
+    normalized
+      .split(" and ")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .forEach((part) => variantSet.add(part))
+  }
+
+  const variantList = Array.from(variantSet)
+  return {
+    normalized,
+    variants: variantList,
+    matchedCanonicals: Array.from(matchedCanonicals),
+  }
 }
 
 interface VoiceSuggestion {
@@ -490,8 +528,10 @@ export function POSBilling() {
           return
         }
 
-        const normalizedTerms = normalizeVoiceText(terms)
-        if (!normalizedTerms) {
+        const { variants: expandedTerms, normalized: normalizedTerms, matchedCanonicals } = expandVoiceTermVariants(terms)
+
+        const searchTerms = expandedTerms.length > 0 ? expandedTerms : normalizedTerms ? [normalizedTerms] : []
+        if (searchTerms.length === 0) {
           toast({
             title: "Product not detected",
             description: "Please include the product name in your voice command.",
@@ -499,22 +539,50 @@ export function POSBilling() {
           return
         }
 
-        let products: Product[] = []
-        try {
-          products = await apiClient.getProducts({ search: terms, active: true })
-        } catch (err) {
-          console.error("Voice lookup failed", err)
+        const productMap = new Map<string, Product>()
+        const fetchProductsForTerm = async (term: string) => {
+          let results: Product[] = []
+          try {
+            results = await apiClient.getProducts({ search: term, active: true })
+          } catch (err) {
+            console.error("Voice lookup failed for term:", term, err)
+          }
+
+          if (results.length === 0) {
+            try {
+              const fallbackProduct = await apiClient.getProductByIdentifier(term)
+              if (fallbackProduct) {
+                results = [fallbackProduct]
+              }
+            } catch {
+              // ignore
+            }
+          }
+
+          for (const product of results) {
+            if (!productMap.has(product._id)) {
+              productMap.set(product._id, product)
+            }
+          }
         }
 
-        if (products.length === 0) {
-          try {
-            const fallbackProduct = await apiClient.getProductByIdentifier(terms)
-            if (fallbackProduct) {
-              products = [fallbackProduct]
-            }
-          } catch {
-            // ignore - fallback best effort
+        for (const term of searchTerms) {
+          await fetchProductsForTerm(term)
+        }
+
+        if (productMap.size === 0 && matchedCanonicals.length > 0) {
+          for (const canonical of matchedCanonicals) {
+            await fetchProductsForTerm(canonical)
           }
+        }
+
+        const products = Array.from(productMap.values())
+        if (products.length === 0) {
+          toast({
+            title: "No similar products",
+            description: "Could not find products matching your voice command.",
+          })
+          return
         }
 
         const suggestions: VoiceSuggestion[] = []
@@ -533,12 +601,21 @@ export function POSBilling() {
                   },
                 ]
 
+          const normalizedProductName = normalizeVoiceText(product.name)
+          const hasCanonicalMatch = matchedCanonicals.some(
+            (canonical) => canonical && canonical === normalizedProductName,
+          )
+
           for (const variant of variants) {
             if (variant.isActive === false) continue
-            const matchScore = computeVoiceMatchScore(product, variant, normalizedTerms)
-            if (matchScore <= 0) continue
+            const bestTermScore = searchTerms.reduce(
+              (best, term) => Math.max(best, computeVoiceMatchScore(product, variant, term)),
+              0,
+            )
+            if (bestTermScore <= 0) continue
 
-            const combinedScore = Math.min(1, matchScore * 0.7 + confidence * 0.3)
+            const canonicalBoost = hasCanonicalMatch ? 0.1 : 0
+            const combinedScore = Math.min(1, bestTermScore * 0.6 + confidence * 0.3 + canonicalBoost)
             if (combinedScore < MIN_SUGGESTION_SCORE) continue
 
             suggestions.push({

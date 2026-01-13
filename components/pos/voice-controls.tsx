@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect } from "react"
+import { useEffect, useRef, useState } from "react"
 import { Mic, Pause, Play, RefreshCw, Square, Waves } from "lucide-react"
 import { useLanguage } from "@/contexts/language-context"
 import { useVoiceBilling } from "@/hooks/use-voice-billing"
@@ -43,17 +43,144 @@ export function VoiceControls({ onTranscript }: VoiceControlsProps) {
     deviceChangePending,
     acknowledgeDeviceChange,
   } = useAudioDevices()
-  const { supported, status, error, transcripts, start, pause, resume, stop, inputLevel } = useVoiceBilling({
+  const {
+    supported,
+    status,
+    error,
+    transcripts,
+    start,
+    pause,
+    resume,
+    stop,
+    inputLevel,
+  } = useVoiceBilling({
     language,
     onTranscript,
     deviceId: selectedDeviceId,
   })
+  const [noiseBaseline, setNoiseBaseline] = useState<number | null>(null)
+  const [isCalibrating, setIsCalibrating] = useState(false)
+  const [noiseStatus, setNoiseStatus] = useState<"ok" | "warning" | "autopaused">("ok")
+  const calibrationIntervalRef = useRef<number | null>(null)
+  const highNoiseStartRef = useRef<number | null>(null)
+  const autoPausedRef = useRef(false)
 
   useEffect(() => {
     if (permissionState === "prompt") {
       void ensurePermission()
     }
   }, [permissionState, ensurePermission])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    const saved = window.localStorage.getItem("voiceNoiseBaseline")
+    if (saved) {
+      const parsed = Number(saved)
+      if (!Number.isNaN(parsed)) {
+        setNoiseBaseline(parsed)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (typeof window === "undefined") return
+    if (noiseBaseline !== null) {
+      window.localStorage.setItem("voiceNoiseBaseline", noiseBaseline.toString())
+    }
+  }, [noiseBaseline])
+
+  useEffect(
+    () => () => {
+      if (calibrationIntervalRef.current) {
+        window.clearInterval(calibrationIntervalRef.current)
+        calibrationIntervalRef.current = null
+      }
+    },
+    [],
+  )
+
+  useEffect(() => {
+    if (noiseBaseline === null) return
+    if (status !== "listening") {
+      highNoiseStartRef.current = null
+      if (noiseStatus !== "autopaused") {
+        setNoiseStatus("ok")
+      }
+      return
+    }
+
+    const excess = inputLevel - noiseBaseline
+    if (excess > 0.35) {
+      if (!highNoiseStartRef.current) {
+        highNoiseStartRef.current = Date.now()
+        if (noiseStatus === "ok") setNoiseStatus("warning")
+      } else if (Date.now() - highNoiseStartRef.current > 2500 && !autoPausedRef.current) {
+        autoPausedRef.current = true
+        setNoiseStatus("autopaused")
+        pause()
+      }
+    } else {
+      highNoiseStartRef.current = null
+      if (noiseStatus !== "autopaused" && noiseStatus !== "ok") {
+        setNoiseStatus("ok")
+      }
+      if (noiseStatus === "autopaused" && status !== "paused") {
+        autoPausedRef.current = false
+        setNoiseStatus("ok")
+      }
+      if (noiseStatus === "warning") {
+        setNoiseStatus("ok")
+      }
+    }
+  }, [inputLevel, noiseBaseline, pause, status, noiseStatus])
+
+  const startCalibration = () => {
+    if (isCalibrating) return
+    setIsCalibrating(true)
+    const samples: number[] = []
+    const startedAt = Date.now()
+
+    const collect = () => {
+      samples.push(inputLevel)
+      if (Date.now() - startedAt >= 3000) {
+        if (calibrationIntervalRef.current) {
+          window.clearInterval(calibrationIntervalRef.current)
+          calibrationIntervalRef.current = null
+        }
+        const avg = samples.length
+          ? samples.reduce((sum, value) => sum + value, 0) / samples.length
+          : inputLevel
+        const clamped = Math.min(0.8, Math.max(0.05, avg))
+        setNoiseBaseline(clamped)
+        setIsCalibrating(false)
+      }
+    }
+
+    calibrationIntervalRef.current = window.setInterval(collect, 150)
+  }
+
+  const handleStart = () => {
+    autoPausedRef.current = false
+    setNoiseStatus("ok")
+    start()
+  }
+
+  const handlePause = () => {
+    autoPausedRef.current = false
+    pause()
+  }
+
+  const handleResume = () => {
+    autoPausedRef.current = false
+    setNoiseStatus("ok")
+    resume()
+  }
+
+  const handleStop = () => {
+    autoPausedRef.current = false
+    setNoiseStatus("ok")
+    stop()
+  }
 
   if (!supported) {
     return (
@@ -96,6 +223,16 @@ export function VoiceControls({ onTranscript }: VoiceControlsProps) {
             style={{ width: `${Math.min(100, Math.round(inputLevel * 100))}%` }}
           />
         </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+        <span>
+          Baseline:{" "}
+          {noiseBaseline !== null ? `${Math.round(noiseBaseline * 100)}%` : "Not calibrated"}
+        </span>
+        <Button size="sm" variant="outline" onClick={startCalibration} disabled={isCalibrating}>
+          {isCalibrating ? "Calibrating..." : "Calibrate Noise"}
+        </Button>
       </div>
 
       <div className="flex flex-wrap items-center gap-2">
@@ -146,17 +283,58 @@ export function VoiceControls({ onTranscript }: VoiceControlsProps) {
         </Alert>
       )}
 
+      {permissionState === "denied" && (
+        <Alert variant="destructive" className="text-xs">
+          <AlertDescription>
+            Microphone access denied. Please allow access in your browser settings and click “Grant Mic Access”.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {noiseBaseline === null && (
+        <Alert className="text-xs border-amber-200 bg-amber-50">
+          <AlertDescription>
+            Calibrate the noise baseline to improve accuracy in busy environments.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {noiseStatus === "warning" && (
+        <Alert className="text-xs border-amber-200 bg-amber-50">
+          <AlertDescription>
+            High ambient noise detected. Voice capture sensitivity has been reduced; consider pausing or recalibrating.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {noiseStatus === "autopaused" && (
+        <Alert variant="destructive" className="text-xs">
+          <AlertDescription className="flex flex-col gap-2">
+            Voice billing was paused because of sustained noise. Resume once the environment is quieter or recalibrate
+            with the current noise level.
+            <div className="flex gap-2">
+              <Button size="sm" variant="secondary" onClick={handleResume}>
+                Resume anyway
+              </Button>
+              <Button size="sm" variant="outline" onClick={startCalibration} disabled={isCalibrating}>
+                Recalibrate
+              </Button>
+            </div>
+          </AlertDescription>
+        </Alert>
+      )}
+
       <div className="flex gap-2">
-        <Button variant="secondary" size="sm" onClick={start} disabled={status === "listening"}>
+        <Button variant="secondary" size="sm" onClick={handleStart} disabled={status === "listening"}>
           <Play className="h-4 w-4 mr-1" /> Start
         </Button>
-        <Button variant="outline" size="sm" onClick={pause} disabled={status !== "listening"}>
+        <Button variant="outline" size="sm" onClick={handlePause} disabled={status !== "listening"}>
           <Pause className="h-4 w-4 mr-1" /> Pause
         </Button>
-        <Button variant="outline" size="sm" onClick={resume} disabled={status !== "paused"}>
+        <Button variant="outline" size="sm" onClick={handleResume} disabled={status !== "paused"}>
           <Waves className="h-4 w-4 mr-1" /> Resume
         </Button>
-        <Button variant="ghost" size="sm" onClick={stop}>
+        <Button variant="ghost" size="sm" onClick={handleStop}>
           <Square className="h-4 w-4 mr-1" /> Stop
         </Button>
       </div>
