@@ -1,11 +1,21 @@
 "use client"
 
-import { Mic, Pause, Play, Square, Waves } from "lucide-react"
+import { useEffect } from "react"
+import { Mic, Pause, Play, RefreshCw, Square, Waves } from "lucide-react"
 import { useLanguage } from "@/contexts/language-context"
 import { useVoiceBilling } from "@/hooks/use-voice-billing"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
+import { useAudioDevices } from "@/hooks/use-audio-devices"
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select"
+import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface VoiceControlsProps {
   onTranscript?: (text: string, confidence: number) => void
@@ -21,10 +31,29 @@ const STATUS_COLORS: Record<string, string> = {
 
 export function VoiceControls({ onTranscript }: VoiceControlsProps) {
   const { language } = useLanguage()
-  const { supported, status, error, transcripts, start, pause, resume, stop } = useVoiceBilling({
+  const {
+    devices,
+    selectedDeviceId,
+    selectDevice,
+    permissionState,
+    ensurePermission,
+    refreshDevices,
+    isEnumerating,
+    supportsDeviceSelection,
+    deviceChangePending,
+    acknowledgeDeviceChange,
+  } = useAudioDevices()
+  const { supported, status, error, transcripts, start, pause, resume, stop, inputLevel } = useVoiceBilling({
     language,
     onTranscript,
+    deviceId: selectedDeviceId,
   })
+
+  useEffect(() => {
+    if (permissionState === "prompt") {
+      void ensurePermission()
+    }
+  }, [permissionState, ensurePermission])
 
   if (!supported) {
     return (
@@ -51,6 +80,71 @@ export function VoiceControls({ onTranscript }: VoiceControlsProps) {
         </div>
         <Badge className={cn("text-xs capitalize", STATUS_COLORS[status])}>{status}</Badge>
       </div>
+
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center justify-between text-xs text-muted-foreground">
+          <span>Input level</span>
+          <span>{Math.round(inputLevel * 100)}%</span>
+        </div>
+        <div className="h-2 rounded-full bg-muted overflow-hidden">
+          <div
+            className={cn("h-full bg-primary transition-all duration-200", {
+              "bg-amber-500": inputLevel > 0.65,
+              "bg-green-500": inputLevel <= 0.65 && inputLevel > 0.25,
+              "bg-red-500": inputLevel <= 0.25,
+            })}
+            style={{ width: `${Math.min(100, Math.round(inputLevel * 100))}%` }}
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-2">
+        {supportsDeviceSelection && (
+          <Select value={selectedDeviceId} onValueChange={selectDevice}>
+            <SelectTrigger className="flex-1 min-w-[160px]">
+              <SelectValue placeholder="Select microphone" />
+            </SelectTrigger>
+            <SelectContent>
+              {devices.map((device) => (
+                <SelectItem key={device.deviceId || device.label} value={device.deviceId || "default"}>
+                  {device.label || "System default"}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        )}
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => ensurePermission()}
+          disabled={permissionState === "granted"}
+        >
+          Grant Mic Access
+        </Button>
+        <Button size="sm" variant="ghost" onClick={() => refreshDevices()} disabled={isEnumerating}>
+          <RefreshCw className={cn("h-4 w-4 mr-1", { "animate-spin": isEnumerating })} />
+          Rescan
+        </Button>
+      </div>
+
+      {permissionState === "denied" && (
+        <Alert variant="destructive" className="text-xs">
+          <AlertDescription>
+            Microphone access denied. Please allow access in your browser settings and click “Grant Mic Access”.
+          </AlertDescription>
+        </Alert>
+      )}
+
+      {deviceChangePending && (
+        <Alert className="text-xs">
+          <AlertDescription className="flex items-center justify-between gap-2">
+            New audio device detected. Select it above or continue with the current microphone.
+            <Button size="sm" variant="outline" onClick={acknowledgeDeviceChange}>
+              Dismiss
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       <div className="flex gap-2">
         <Button variant="secondary" size="sm" onClick={start} disabled={status === "listening"}>

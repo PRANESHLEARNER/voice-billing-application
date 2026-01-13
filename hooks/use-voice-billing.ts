@@ -57,6 +57,7 @@ export interface TranscriptSegment {
 interface UseVoiceBillingOptions {
   language: Language
   onTranscript?: (transcript: string, confidence: number) => void
+  deviceId?: string
 }
 
 interface UseVoiceBillingResult {
@@ -68,6 +69,7 @@ interface UseVoiceBillingResult {
   pause: () => void
   resume: () => void
   stop: () => void
+  inputLevel: number
 }
 
 const LANGUAGE_TO_LOCALE: Record<Language, string> = {
@@ -76,15 +78,96 @@ const LANGUAGE_TO_LOCALE: Record<Language, string> = {
   bilingual: "en-IN",
 }
 
-export function useVoiceBilling({ language, onTranscript }: UseVoiceBillingOptions): UseVoiceBillingResult {
+export function useVoiceBilling({
+  language,
+  onTranscript,
+  deviceId,
+}: UseVoiceBillingOptions): UseVoiceBillingResult {
   const recognitionRef = useRef<SpeechRecognition | null>(null)
+  const mediaStreamRef = useRef<MediaStream | null>(null)
+  const audioContextRef = useRef<AudioContext | null>(null)
+  const analyserRef = useRef<AnalyserNode | null>(null)
+  const rafRef = useRef<number>()
   const [supported, setSupported] = useState<boolean>(false)
   const [status, setStatus] = useState<VoiceSessionStatus>("idle")
   const [error, setError] = useState<string | null>(null)
   const [transcripts, setTranscripts] = useState<TranscriptSegment[]>([])
+  const [inputLevel, setInputLevel] = useState(0)
   const pausedRef = useRef(false)
 
   const locale = useMemo(() => LANGUAGE_TO_LOCALE[language] ?? "en-IN", [language])
+  const deviceConstraint = useMemo(() => {
+    if (!deviceId || deviceId === "default") return undefined
+    return { exact: deviceId }
+  }, [deviceId])
+
+  const teardownAudioGraph = useCallback(() => {
+    if (rafRef.current) {
+      cancelAnimationFrame(rafRef.current)
+      rafRef.current = undefined
+    }
+    analyserRef.current?.disconnect()
+    analyserRef.current = null
+    audioContextRef.current?.close().catch(() => void 0)
+    audioContextRef.current = null
+    mediaStreamRef.current?.getTracks().forEach((track) => track.stop())
+    mediaStreamRef.current = null
+    setInputLevel(0)
+  }, [])
+
+  const pumpInputLevel = useCallback(() => {
+    if (!analyserRef.current) return
+    const analyser = analyserRef.current
+    const dataArray = new Uint8Array(analyser.fftSize)
+
+    const updateLevel = () => {
+      analyser.getByteTimeDomainData(dataArray)
+      let sum = 0
+      for (let i = 0; i < dataArray.length; i++) {
+        const value = dataArray[i] / 128 - 1
+        sum += value * value
+      }
+      const rms = Math.sqrt(sum / dataArray.length)
+      setInputLevel(Number.isFinite(rms) ? Math.min(1, rms * 2.5) : 0)
+      rafRef.current = requestAnimationFrame(updateLevel)
+    }
+
+    rafRef.current = requestAnimationFrame(updateLevel)
+  }, [])
+
+  const ensureAudioStream = useCallback(async () => {
+    if (mediaStreamRef.current) return mediaStreamRef.current
+    if (!navigator.mediaDevices?.getUserMedia) return null
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        audio: {
+          deviceId: deviceConstraint,
+          noiseSuppression: true,
+          echoCancellation: true,
+          autoGainControl: false,
+        },
+        video: false,
+      })
+      mediaStreamRef.current = stream
+
+      const audioContext = new AudioContext()
+      audioContextRef.current = audioContext
+      const source = audioContext.createMediaStreamSource(stream)
+      const analyser = audioContext.createAnalyser()
+      analyser.fftSize = 256
+      analyserRef.current = analyser
+      source.connect(analyser)
+      pumpInputLevel()
+
+      return stream
+    } catch (err) {
+      console.error("Unable to access microphone", err)
+      setError("Unable to access microphone. Check device permissions or selection.")
+      setStatus("error")
+      return null
+    }
+  }, [deviceConstraint, pumpInputLevel])
 
   const ensureRecognitionInstance = useCallback(() => {
     if (typeof window === "undefined") return null
@@ -162,16 +245,26 @@ export function useVoiceBilling({ language, onTranscript }: UseVoiceBillingOptio
     return () => {
       recognition?.stop()
       recognitionRef.current = null
+      teardownAudioGraph()
     }
-  }, [ensureRecognitionInstance, locale])
+  }, [ensureRecognitionInstance, locale, teardownAudioGraph])
 
-  const start = useCallback(() => {
+  useEffect(() => {
+    if (status !== "listening") return
+    // When device changes mid-session, restart capture to honor new selection
+    teardownAudioGraph()
+    void ensureAudioStream()
+  }, [deviceConstraint, ensureAudioStream, status, teardownAudioGraph])
+
+  const start = useCallback(async () => {
     const recognition = ensureRecognitionInstance()
     if (!recognition) {
       setError("Voice recognition is not supported in this browser")
       return
     }
     try {
+      const stream = await ensureAudioStream()
+      if (!stream) return
       pausedRef.current = false
       recognition.lang = locale
       recognition.start()
@@ -182,7 +275,7 @@ export function useVoiceBilling({ language, onTranscript }: UseVoiceBillingOptio
       setError("Unable to start microphone. Check permissions and try again.")
       setStatus("error")
     }
-  }, [ensureRecognitionInstance, locale])
+  }, [ensureAudioStream, ensureRecognitionInstance, locale])
 
   const stop = useCallback(() => {
     const recognition = recognitionRef.current
@@ -190,6 +283,7 @@ export function useVoiceBilling({ language, onTranscript }: UseVoiceBillingOptio
     pausedRef.current = false
     recognition.stop()
     setStatus("idle")
+    teardownAudioGraph()
   }, [])
 
   const pause = useCallback(() => {
@@ -206,7 +300,7 @@ export function useVoiceBilling({ language, onTranscript }: UseVoiceBillingOptio
       return
     }
     pausedRef.current = false
-    start()
+    void start()
   }, [start])
 
   return {
@@ -218,5 +312,6 @@ export function useVoiceBilling({ language, onTranscript }: UseVoiceBillingOptio
     pause,
     resume,
     stop,
+    inputLevel,
   }
 }
