@@ -417,6 +417,10 @@ export function POSBilling() {
     [addProduct, toast],
   )
 
+  const dismissVoiceSuggestion = useCallback((id: string) => {
+    setVoiceSuggestions((prev) => prev.filter((entry) => entry.id !== id))
+  }, [])
+
   const handleVoiceTranscript = useCallback(
     async (text: string, confidence: number) => {
       if (!voiceEnabled) return
@@ -800,6 +804,68 @@ export function POSBilling() {
               {voiceEnabled && lastVoiceCommand && (
                 <div className="text-xs text-muted-foreground">
                   Last voice command: <span className="font-medium text-foreground">{lastVoiceCommand}</span>
+                </div>
+              )}
+              {voiceEnabled && (isVoiceProcessing || voiceSuggestions.length > 0) && (
+                <div className="rounded-lg border bg-background/60 p-3 space-y-3">
+                  <div className="flex items-center justify-between text-xs">
+                    <div className="flex items-center gap-2 font-medium text-foreground">
+                      <Sparkles className="h-3.5 w-3.5 text-primary" />
+                      Voice suggestions
+                    </div>
+                    {isVoiceProcessing && (
+                      <Badge variant="outline" className="text-[10px] gap-1">
+                        <Loader2 className="h-3 w-3 animate-spin" />
+                        Processing
+                      </Badge>
+                    )}
+                  </div>
+
+                  {voiceSuggestions.map((suggestion) => (
+                    <div
+                      key={suggestion.id}
+                      className="border rounded-md p-2 text-xs flex flex-col gap-2 bg-muted/30"
+                    >
+                      <div className="flex items-start justify-between gap-2">
+                        <div>
+                          <p className="font-medium text-sm text-foreground">{suggestion.product.name}</p>
+                          <p className="text-muted-foreground text-[11px]">
+                            {suggestion.variant.size} • Qty {suggestion.quantity}
+                          </p>
+                          <p className="text-[11px] text-muted-foreground">
+                            Confidence {(suggestion.score * 100).toFixed(0)}%
+                          </p>
+                        </div>
+                        <Badge variant="secondary" className="text-[10px] capitalize">
+                          {suggestion.action}
+                        </Badge>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button
+                          size="sm"
+                          onClick={() => applyVoiceSuggestion(suggestion)}
+                          disabled={isVoiceProcessing}
+                          className="text-[11px] gap-1"
+                        >
+                          <Check className="h-3 w-3" />
+                          Apply
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => dismissVoiceSuggestion(suggestion.id)}
+                          disabled={isVoiceProcessing}
+                          className="text-[11px]"
+                        >
+                          Dismiss
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+
+                  {!isVoiceProcessing && voiceSuggestions.length === 0 && (
+                    <p className="text-[11px] text-muted-foreground">Waiting for voice matches…</p>
+                  )}
                 </div>
               )}
             </div>
