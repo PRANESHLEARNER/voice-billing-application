@@ -25,6 +25,7 @@ interface ProductFormProps {
   isOpen: boolean
   onClose: () => void
   onSuccess: () => void
+  initialValues?: Partial<Product>
 }
 
 const categories = [
@@ -44,7 +45,7 @@ const categories = [
 
 const units = ["pcs", "kg", "gm", "liter", "ml", "bottle", "packet", "box", "can", "jar"]
 
-export function ProductForm({ product, isOpen, onClose, onSuccess }: ProductFormProps) {
+export function ProductForm({ product, isOpen, onClose, onSuccess, initialValues }: ProductFormProps) {
   const [formData, setFormData] = useState({
     code: "",
     name: "",
@@ -69,54 +70,56 @@ export function ProductForm({ product, isOpen, onClose, onSuccess }: ProductForm
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState("")
 
+  const buildFormDataFromInitial = (values?: Partial<Product>) => ({
+    code: values?.code ?? "",
+    name: values?.name ?? "",
+    barcode: values?.barcode ?? "",
+    category: values?.category ?? "",
+    basePrice: values?.basePrice !== undefined && values?.basePrice !== null ? values.basePrice.toString() : "",
+    baseCost: values?.baseCost !== undefined && values?.baseCost !== null ? values.baseCost.toString() : "",
+    unit: values?.unit ?? "pcs",
+    taxRate: values?.taxRate !== undefined && values?.taxRate !== null ? values.taxRate.toString() : "",
+    isActive: values?.isActive ?? true,
+  })
+
+  const buildVariantsFromInitial = (sourceVariants?: ProductVariant[]) => {
+    if (sourceVariants && sourceVariants.length > 0) {
+      return sourceVariants.map((variant) => ({
+        size: variant.size,
+        price: variant.price,
+        cost: variant.cost,
+        stock: variant.stock,
+        sku: variant.sku,
+        barcode: variant.barcode,
+        isActive: variant.isActive,
+      }))
+    }
+    return [
+      {
+        size: "",
+        price: 0,
+        cost: 0,
+        stock: 0,
+        sku: "",
+        isActive: true,
+      },
+    ]
+  }
+
   useEffect(() => {
     if (product) {
-      setFormData({
-        code: product.code,
-        name: product.name,
-        barcode: product.barcode || "",
-        category: product.category,
-        basePrice: product.basePrice.toString(),
-        baseCost: product.baseCost.toString(),
-        unit: product.unit,
-        taxRate: product.taxRate.toString(),
-        isActive: product.isActive,
-      })
-      setVariants(product.variants || [
-        {
-          size: "",
-          price: 0,
-          cost: 0,
-          stock: 0,
-          sku: "",
-          isActive: true,
-        }
-      ])
+      setFormData(buildFormDataFromInitial(product))
+      setVariants(buildVariantsFromInitial(product.variants))
     } else {
-      setFormData({
-        code: "",
-        name: "",
-        barcode: "",
-        category: "",
-        basePrice: "",
-        baseCost: "",
-        unit: "pcs",
-        taxRate: "",
-        isActive: true,
-      })
-      setVariants([
-        {
-          size: "",
-          price: 0,
-          cost: 0,
-          stock: 0,
-          sku: "",
-          isActive: true,
-        }
-      ])
+      const combinedInitials: Partial<Product> | undefined = initialValues
+      setFormData(buildFormDataFromInitial(combinedInitials))
+      const initialVariants = combinedInitials?.variants?.length
+        ? combinedInitials.variants
+        : undefined
+      setVariants(buildVariantsFromInitial(initialVariants as ProductVariant[] | undefined))
     }
     setError("")
-  }, [product, isOpen])
+  }, [product, isOpen, initialValues])
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()

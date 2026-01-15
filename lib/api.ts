@@ -1,5 +1,6 @@
 import { authService } from "./auth"
 import type { Employee } from "@/types/employee"
+import type { Language } from "@/contexts/language-context"
 
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api"
 
@@ -78,6 +79,18 @@ class ApiClient {
     return this.request<{ message: string }>(`/products/${id}`, {
       method: "DELETE",
     })
+  }
+
+  async logVoiceMissingItem(payload: VoiceMissingItemPayload) {
+    try {
+      return await this.request<{ message: string }>("/voice/missing-items", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      })
+    } catch (error) {
+      console.warn("Voice missing item logging failed", error)
+      return null
+    }
   }
 
   // -------------------
@@ -626,6 +639,16 @@ export interface Product {
   variants: ProductVariant[]
   createdAt: string
   updatedAt: string
+}
+
+export interface VoiceMissingItemPayload {
+  transcript: string
+  normalizedName: string
+  language: Language
+  confidence: number
+  cashierId?: string
+  storeId?: string
+  createdAt?: string
 }
 
 export interface BillItem {

@@ -13,11 +13,14 @@ import { PaymentSection } from "./payment-section"
 import { CustomerInfo } from "./customer-info"
 import { VoiceControls } from "./voice-controls"
 import { LanguageSelector } from "@/components/ui/language-selector"
+import { ProductForm } from "@/components/products/product-form"
 import { apiClient, type Product, type ProductVariant, type CustomerInfo as CustomerInfoType } from "@/lib/api"
 import { featureFlags } from "@/lib/feature-flags"
 import { parseVoiceCommand, type VoiceAction } from "@/lib/voice-parser"
 import { useToast } from "@/hooks/use-toast"
 import { VOICE_SYNONYMS } from "@/lib/voice-synonyms"
+import { useLanguage } from "@/contexts/language-context"
+import type { Language } from "@/contexts/language-context"
 
 const VOICE_CONFIDENCE_THRESHOLD = 0.55
 const MAX_VOICE_SUGGESTIONS = 3
@@ -125,8 +128,26 @@ interface VoiceSuggestion {
   score: number
 }
 
+interface VoiceMissingItem {
+  id: string
+  transcript: string
+  normalizedName: string
+  language: Language
+  confidence: number
+  createdAt: string
+}
+
+function toTitleCase(value: string) {
+  return value
+    .split(" ")
+    .filter(Boolean)
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ")
+}
+
 export function POSBilling() {
   const { toast } = useToast()
+  const { language } = useLanguage()
   const [billItems, setBillItems] = useState<BillItem[]>([])
   const [customerInfo, setCustomerInfo] = useState<CustomerInfoType>({ name: '', phone: '' })
   const [isProcessing, setIsProcessing] = useState(false)
@@ -148,6 +169,9 @@ export function POSBilling() {
   const [lastVoiceCommand, setLastVoiceCommand] = useState<string>("")
   const [voiceSuggestions, setVoiceSuggestions] = useState<VoiceSuggestion[]>([])
   const [isVoiceProcessing, setIsVoiceProcessing] = useState(false)
+  const [voiceMissingItems, setVoiceMissingItems] = useState<VoiceMissingItem[]>([])
+  const [isProductFormOpen, setIsProductFormOpen] = useState(false)
+  const [productFormInitialValues, setProductFormInitialValues] = useState<Partial<Product> | undefined>(undefined)
   const voiceEnabled = featureFlags.voiceBilling
 
   const calculateItemTotals = useCallback((item: Omit<BillItem, "amount" | "taxAmount" | "totalAmount">) => {
@@ -459,6 +483,55 @@ export function POSBilling() {
     setVoiceSuggestions((prev) => prev.filter((entry) => entry.id !== id))
   }, [])
 
+  const registerMissingItem = useCallback(
+    async ({ transcript, normalizedName, confidence }: { transcript: string; normalizedName: string; confidence: number }) => {
+      if (!normalizedName) return
+      const missingEntry: VoiceMissingItem = {
+        id: `${Date.now()}-${Math.random()}`,
+        transcript,
+        normalizedName,
+        language,
+        confidence,
+        createdAt: new Date().toISOString(),
+      }
+      setVoiceMissingItems((prev) => [missingEntry, ...prev].slice(0, 5))
+      try {
+        await apiClient.logVoiceMissingItem({
+          transcript,
+          normalizedName,
+          language,
+          confidence,
+        })
+      } catch (err) {
+        console.warn("Failed to log missing voice item", err)
+      }
+    },
+    [language],
+  )
+
+  const dismissMissingItem = useCallback((id: string) => {
+    setVoiceMissingItems((prev) => prev.filter((entry) => entry.id !== id))
+  }, [])
+
+  const openProductFormForMissingItem = useCallback((item: VoiceMissingItem) => {
+    setProductFormInitialValues({ name: toTitleCase(item.normalizedName) })
+    setIsProductFormOpen(true)
+    dismissMissingItem(item.id)
+  }, [dismissMissingItem])
+
+  const closeProductForm = useCallback(() => {
+    setIsProductFormOpen(false)
+    setProductFormInitialValues(undefined)
+  }, [])
+
+  const handleProductFormSuccess = useCallback(() => {
+    toast({
+      title: "Product created",
+      description: "The inventory has been updated with your new item.",
+    })
+    closeProductForm()
+  }, [closeProductForm, toast])
+
   const handleVoiceTranscript = useCallback(
     async (text: string, confidence: number) => {
       if (!voiceEnabled) return
@@ -578,9 +651,13 @@ export function POSBilling() {
 
         const products = Array.from(productMap.values())
         if (products.length === 0) {
+          const referenceName = searchTerms[0] || normalizedTerms
+          if (referenceName) {
+            await registerMissingItem({ transcript: trimmed, normalizedName: referenceName, confidence })
+          }
           toast({
-            title: "No similar products",
-            description: "Could not find products matching your voice command.",
+            title: "Product not found",
+            description: "This item is not in inventory yet. Use the quick add suggestion below.",
           })
           return
         }
@@ -634,9 +711,13 @@ export function POSBilling() {
         const limitedSuggestions = suggestions.slice(0, MAX_VOICE_SUGGESTIONS)
 
         if (limitedSuggestions.length === 0) {
+          const referenceName = searchTerms[0] || normalizedTerms
+          if (referenceName) {
+            await registerMissingItem({ transcript: trimmed, normalizedName: referenceName, confidence })
+          }
           toast({
-            title: "No similar products",
-            description: "Could not find products matching your voice command.",
+            title: "Product not found",
+            description: "This item is not in inventory yet. Use the quick add suggestion below.",
           })
           return
         }
@@ -667,7 +748,7 @@ export function POSBilling() {
         setIsVoiceProcessing(false)
       }
     },
-    [voiceEnabled, toast, holdBill, billItems, clearBill, tryRemoveVoiceItem, applyVoiceSuggestion],
+    [voiceEnabled, toast, holdBill, billItems, clearBill, tryRemoveVoiceItem, applyVoiceSuggestion, registerMissingItem],
   )
 
   const handlePayment = async (paymentData: {
@@ -827,18 +908,19 @@ export function POSBilling() {
   }
 
   return (
-    <div className="h-full bg-background overflow-hidden">
-      {/* Main Container Card */}
-      <Card className="h-full flex flex-col overflow-hidden">
-        {/* Header */}
-        {/* <CardHeader className="flex-shrink-0 border-b">
-          <CardTitle className="flex items-center gap-2">
-            <ShoppingCart className="h-5 w-5" />
-            POS Billing System
-          </CardTitle>
-        </CardHeader> */}
+    <>
+      <div className="h-full bg-background overflow-hidden">
+        {/* Main Container Card */}
+        <Card className="h-full flex flex-col overflow-hidden">
+          {/* Header */}
+          {/* <CardHeader className="flex-shrink-0 border-b">
+            <CardTitle className="flex items-center gap-2">
+              <ShoppingCart className="h-5 w-5" />
+              POS Billing System
+            </CardTitle>
+          </CardHeader> */}
 
-        <CardContent className="flex-1 p-0 flex flex-col lg:flex-row overflow-hidden">
+          <CardContent className="flex-1 p-0 flex flex-col lg:flex-row overflow-hidden">
           {/* Left Side - Main Workspace */}
           <div className="flex-1 flex flex-col p-6 space-y-6 min-w-0 overflow-hidden">
             {/* Alerts */}
@@ -943,6 +1025,31 @@ export function POSBilling() {
                   {!isVoiceProcessing && voiceSuggestions.length === 0 && (
                     <p className="text-[11px] text-muted-foreground">Waiting for voice matches…</p>
                   )}
+                </div>
+              )}
+
+              {voiceEnabled && voiceMissingItems.length > 0 && (
+                <div className="rounded-lg border border-dashed bg-muted/20 p-3 space-y-3">
+                  <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+                    <span>Not in inventory yet</span>
+                    <Badge variant="secondary" className="text-[10px]">
+                      {voiceMissingItems.length} pending
+                    </Badge>
+                  </div>
+                  {voiceMissingItems.map((item) => (
+                    <div key={item.id} className="border rounded-md bg-background p-3 space-y-2 text-xs">
+                      <div className="font-semibold text-foreground">{toTitleCase(item.normalizedName)}</div>
+                      <div className="text-[11px] text-muted-foreground">“{item.transcript}”</div>
+                      <div className="flex flex-wrap gap-2">
+                        <Button size="sm" variant="default" onClick={() => openProductFormForMissingItem(item)}>
+                          Add to inventory
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => dismissMissingItem(item.id)}>
+                          Dismiss
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -1138,8 +1245,17 @@ export function POSBilling() {
               )}
             </div>
           </div>
-        </CardContent>
-      </Card>
-    </div>
+            </CardContent>
+        </Card>
+      </div>
+
+      <ProductForm
+        product={null}
+        isOpen={isProductFormOpen}
+        onClose={closeProductForm}
+        onSuccess={handleProductFormSuccess}
+        initialValues={productFormInitialValues}
+      />
+    </>
   )
 }
