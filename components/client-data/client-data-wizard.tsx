@@ -274,5 +274,237 @@ export function ClientDataWizard() {
                   </Select>
                 </Field>
                 <Field label="Notes">
-                  <Textarea rows={3} value={receiptSample.notes ?? ""} onChange={(e) => setReceiptSample((prev) => ({ ...prev, notes: e.target value }))} />
+                  <Textarea rows={3} value={receiptSample.notes ?? ""} onChange={(e) => setReceiptSample((prev) => ({ ...prev, notes: e.target.value }))} />
+                </Field>
+              </div>
+              {!receiptSample.useSystemDefault && (
+                <UploadZone
+                  label="Sample Printed Bill (PDF/Image)"
+                  description="Photos from your receipt printer work too"
+                  files={filesByType.BILL_SAMPLE}
+                  isUploading={isUploading}
+                  accept=".pdf,.png,.jpg,.jpeg"
+                  onChange={(e) => handleUpload(e, "BILL_SAMPLE")}
+                />
+              )}
+              <div className="flex justify-between">
+                <Button variant="outline" onClick={() => setCurrentStep("items")}>Back</Button>
+                <Button onClick={handleSaveReceipt} disabled={isSaving}>
+                  {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                  Save & Continue
+                </Button>
+              </div>
+            </div>
+          </SectionCard>
+        )
+      case "review":
+        return (
+          <SectionCard title="Review" description="Double-check everything before submitting">
+            <div className="space-y-4">
+              <SummaryRow label="Store Name" value={businessProfile.storeName || "-"} />
+              <SummaryRow label="Contact" value={`${businessProfile.contactName || "-"} (${businessProfile.contactPhone || "N/A"})`} />
+              <SummaryRow label="Tax Regime" value={regimeOptions.find((opt) => opt.value === taxConfig.regime)?.label ?? taxConfig.regime} />
+              <SummaryRow label="Rounding" value={roundingOptions.find((opt) => opt.value === taxConfig.roundingPreference)?.label ?? taxConfig.roundingPreference} />
+              <SummaryRow label="SKU File" value={filesByType.SKU_LIST.length ? `${filesByType.SKU_LIST.length} file(s)` : "Not uploaded"} />
+              <SummaryRow label="Tax Documents" value={filesByType.TAX_PROOF.length ? `${filesByType.TAX_PROOF.length} file(s)` : "Not uploaded"} />
+              <SummaryRow label="Receipt Sample" value={receiptSample.useSystemDefault ? "Using default" : filesByType.BILL_SAMPLE.length ? "Uploaded" : "Pending"} />
+            </div>
+            <div className="flex flex-wrap gap-3 justify-between">
+              <Button variant="outline" onClick={() => setCurrentStep("receipt")}>Back</Button>
+              <div className="flex gap-3">
+                <Button variant="ghost" onClick={() => refresh()} disabled={isSubmitting}>
+                  Refresh
+                </Button>
+                <Button onClick={() => submit()} disabled={isSubmitting || status === "pending_review" || status === "complete"}>
+                  {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <CheckCircle2 className="mr-2 h-4 w-4" />}
+                  {status === "pending_review" || status === "complete" ? "Awaiting Approval" : "Submit for Review"}
+                </Button>
+              </div>
+            </div>
+            {status === "pending_review" && (
+              <Alert className="mt-4">
+                <AlertTriangle className="h-4 w-4" />
+                <AlertDescription>Your data is pending admin approval. You'll be notified once it's marked complete.</AlertDescription>
+              </Alert>
+            )}
+            {status === "complete" && (
+              <Alert className="mt-4" variant="default">
+                <AlertDescription>All set! Billing and voice workflows are unlocked.</AlertDescription>
+              </Alert>
+            )}
+          </SectionCard>
+        )
+    }
+  }
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-semibold">Client Data Intake</h1>
+          <p className="text-sm text-muted-foreground">Complete the steps to unlock billing & voice workflows.</p>
+        </div>
+        <Badge variant={status === "complete" ? "default" : status === "pending_review" ? "secondary" : "outline"}>Status: {status.replace("_", " ")}</Badge>
+      </div>
+
+      {error && (
+        <Alert variant="destructive">
+          <AlertTitle>Something went wrong</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      <Card>
+        <CardHeader>
+          <div className="flex items-center justify-between gap-4">
+            <div>
+              <CardTitle className="text-lg">{steps.find((s) => s.id === currentStep)?.title}</CardTitle>
+              <p className="text-sm text-muted-foreground">{steps.find((s) => s.id === currentStep)?.description}</p>
+            </div>
+            <div className="w-48">
+              <Progress value={progress} />
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent className="space-y-6">
+          <Stepper currentStep={currentStep} onStepChange={setCurrentStep} />
+          {isLoading ? (
+            <div className="flex items-center justify-center py-12 text-muted-foreground">
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" /> Loading intake data...
+            </div>
+          ) : (
+            renderStep()
+          )}
+        </CardContent>
+      </Card>
+    </div>
+  )
+}
+
+// Helper components
+
+interface SectionCardProps {
+  title: string
+  description: string
+  children: React.ReactNode
+}
+
+function SectionCard({ title, description, children }: SectionCardProps) {
+  return (
+    <div className="border rounded-lg p-6 space-y-4 bg-muted/30">
+      <div>
+        <h3 className="text-lg font-semibold">{title}</h3>
+        <p className="text-sm text-muted-foreground">{description}</p>
+      </div>
+      {children}
+    </div>
+  )
+}
+
+interface FieldProps {
+  label: string
+  children: React.ReactNode
+  className?: string
+}
+
+function Field({ label, children, className }: FieldProps) {
+  return (
+    <div className={className}>
+      <Label className="text-xs font-medium text-muted-foreground">{label}</Label>
+      <div className="mt-1.5">{children}</div>
+    </div>
+  )
+}
+
+interface StepperProps {
+  currentStep: Step
+  onStepChange: (step: Step) => void
+}
+
+function Stepper({ currentStep, onStepChange }: StepperProps) {
+  return (
+    <div className="flex flex-wrap gap-3">
+      {steps.map((step, index) => {
+        const active = step.id === currentStep
+        const completed = steps.findIndex((s) => s.id === currentStep) > index
+        return (
+          <button
+            key={step.id}
+            type="button"
+            onClick={() => onStepChange(step.id)}
+            className={cn(
+              "flex flex-col items-start rounded-lg border px-4 py-2 text-left",
+              active && "border-primary bg-primary/5",
+              completed && "border-green-500 bg-green-50",
+            )}
+          >
+            <span className="text-xs uppercase tracking-wide text-muted-foreground">Step {index + 1}</span>
+            <span className="text-sm font-semibold flex items-center gap-2">
+              {step.title}
+              {completed && <CheckCircle2 className="h-4 w-4 text-green-600" />}
+            </span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+interface UploadZoneProps {
+  label: string
+  description: string
+  files: ClientDataFile[]
+  isUploading: boolean
+  accept: string
+  onChange: (e: React.ChangeEvent<HTMLInputElement>) => void
+}
+
+function UploadZone({ label, description, files, isUploading, accept, onChange }: UploadZoneProps) {
+  return (
+    <div>
+      <Label className="text-sm font-medium">{label}</Label>
+      <p className="text-xs text-muted-foreground mb-2">{description}</p>
+      <div className="border-2 border-dashed border-muted-foreground/25 rounded-lg p-4 text-center">
+        {isUploading ? (
+          <div className="flex items-center justify-center gap-2 text-muted-foreground">
+            <Loader2 className="h-4 w-4 animate-spin" /> Uploading...
+          </div>
+        ) : (
+          <>
+            <Upload className="mx-auto h-8 w-8 text-muted-foreground" />
+            <p className="text-xs text-muted-foreground mt-2">Drag & drop or click to browse</p>
+            <input type="file" accept={accept} onChange={onChange} className="hidden" id={label} />
+            <Button variant="outline" size="sm" className="mt-2" asChild>
+              <label htmlFor={label}>Choose File</label>
+            </Button>
+          </>
+        )}
+      </div>
+      {files.length > 0 && (
+        <ul className="mt-2 space-y-1">
+          {files.map((file, idx) => (
+            <li key={idx} className="text-xs text-muted-foreground flex items-center gap-2">
+              <CheckCircle2 className="h-3 w-3 text-green-600" />
+              {file.originalName}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+interface SummaryRowProps {
+  label: string
+  value: string
+}
+
+function SummaryRow({ label, value }: SummaryRowProps) {
+  return (
+    <div className="flex justify-between py-2 border-b border-muted">
+      <span className="text-sm font-medium">{label}</span>
+      <span className="text-sm text-muted-foreground">{value}</span>
+    </div>
+  )
+}
 
