@@ -2,6 +2,66 @@ import { authService } from "./auth"
 import type { Employee } from "@/types/employee"
 import type { Language } from "@/contexts/language-context"
 
+export type ClientDataStatus = "missing" | "draft" | "pending_review" | "complete" | "reopened"
+
+export interface ClientDataFileMeta {
+  totalItems?: number
+  notes?: string
+}
+
+export interface ClientDataFile {
+  type: "SKU_LIST" | "TAX_PROOF" | "BILL_SAMPLE"
+  originalName?: string
+  filename?: string
+  path?: string
+  mimeType?: string
+  size?: number
+  uploadedAt?: string
+  meta?: ClientDataFileMeta
+}
+
+export interface ClientData {
+  _id: string
+  user: string
+  status: ClientDataStatus
+  businessProfile?: {
+    storeName?: string
+    storeAddress?: string
+    taxId?: string
+    contactName?: string
+    contactPhone?: string
+    contactEmail?: string
+  }
+  taxConfig?: {
+    currency?: string
+    regime?: string
+    roundingPreference?: string
+    notes?: string
+  }
+  itemMasterSummary?: {
+    totalItems?: number
+    lastUploadedAt?: string
+    templateVersion?: string
+  }
+  receiptSample?: {
+    provided?: boolean
+    useSystemDefault?: boolean
+    notes?: string
+  }
+  files: ClientDataFile[]
+  audit?: {
+    submittedBy?: string
+    submittedAt?: string
+    approvedBy?: string
+    approvedAt?: string
+    lastUpdatedBy?: string
+    lastUpdatedAt?: string
+    notes?: string
+  }
+  createdAt?: string
+  updatedAt?: string
+}
+
 const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api"
 
 class ApiClient {
@@ -17,9 +77,11 @@ class ApiClient {
       tokenPreview: token ? token.substring(0, 20) + '...' : 'none'
     })
 
+    const isFormData = typeof FormData !== "undefined" && options.body instanceof FormData
+
     const config: RequestInit = {
       headers: {
-        "Content-Type": "application/json",
+        ...(isFormData ? {} : { "Content-Type": "application/json" }),
         ...(token && { Authorization: `Bearer ${token}` }),
         ...options.headers,
       },
@@ -299,6 +361,46 @@ class ApiClient {
   // Admin: Get available cashiers
   async getAvailableCashiers() {
     return this.request<any>("/shifts/available-cashiers")
+  }
+
+  // -------------------
+  // Client Data Intake API methods
+  // -------------------
+  async getClientData() {
+    return this.request<ClientData>("/client-data/me")
+  }
+
+  async updateClientData(payload: Partial<ClientData>) {
+    return this.request<ClientData>("/client-data/me", {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    })
+  }
+
+  async submitClientData(options?: { autoApprove?: boolean }) {
+    return this.request<ClientData>("/client-data/me/submit", {
+      method: "POST",
+      body: JSON.stringify(options ?? {}),
+    })
+  }
+
+  async uploadClientDataFile(formData: FormData) {
+    return this.request<ClientData>("/client-data/upload", {
+      method: "POST",
+      body: formData,
+      headers: {}, // Let browser set Content-Type for multipart/form-data
+    })
+  }
+
+  async listClientData() {
+    return this.request<ClientData[]>("/client-data")
+  }
+
+  async updateClientDataStatus(id: string, payload: { status: ClientDataStatus; notes?: string }) {
+    return this.request<ClientData>(`/client-data/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify(payload),
+    })
   }
 
   // -------------------
