@@ -46,6 +46,49 @@ class ApiClient {
   }
 
   // -------------------
+  // Client Data API methods
+  // -------------------
+  async getClientData(): Promise<ClientData> {
+    return this.request<ClientData>("/client-data/me")
+  }
+
+  async updateClientData(data: Partial<ClientData>): Promise<ClientData> {
+    return this.request<ClientData>("/client-data/me", {
+      method: "PATCH",
+      body: JSON.stringify(data)
+    })
+  }
+
+  async submitClientData(): Promise<{ message: string }> {
+    return this.request<{ message: string }>("/client-data/me/submit", {
+      method: "POST"
+    })
+  }
+
+  async uploadClientDataFile(file: File, type: "SKU_LIST" | "TAX_PROOF" | "BILL_SAMPLE"): Promise<ClientDataFile> {
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("type", type)
+    
+    return this.request<ClientDataFile>("/client-data/upload", {
+      method: "POST",
+      body: formData,
+      headers: {} // Let browser set Content-Type for multipart/form-data
+    })
+  }
+
+  async listClientData(): Promise<ClientData[]> {
+    return this.request<ClientData[]>("/client-data")
+  }
+
+  async updateClientDataStatus(id: string, status: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/client-data/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status })
+    })
+  }
+
+  // -------------------
   // Product API methods
   // -------------------
   async getProducts(params?: { search?: string; category?: string; active?: boolean }) {
@@ -947,6 +990,54 @@ export interface DiscountStats {
     _id: string
     count: number
   }>
+}
+
+export interface ClientData {
+  _id?: string
+  businessProfile?: {
+    storeName?: string
+    contactName?: string
+    contactPhone?: string
+    contactEmail?: string
+    address?: string
+    completed?: boolean
+  }
+  taxConfig?: {
+    regime?: string
+    gstin?: string
+    roundingPreference?: string
+    completed?: boolean
+  }
+  itemMaster?: {
+    totalSkuCount?: number
+    categories?: string[]
+    completed?: boolean
+  }
+  receiptSample?: {
+    useSystemDefault?: boolean
+    notes?: string
+    completed?: boolean
+  }
+  status?: "not_started" | "in_progress" | "pending_review" | "complete"
+  files?: ClientDataFile[]
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ClientDataFile {
+  _id: string
+  type: "SKU_LIST" | "TAX_PROOF" | "BILL_SAMPLE"
+  originalName: string
+  fileName: string
+  size: number
+  mimeType: string
+  uploadedAt: string
+}
+
+export interface ClientDataStatus {
+  status: "not_started" | "in_progress" | "pending_review" | "complete"
+  canSubmit: boolean
+  missingSections: string[]
 }
 
 export const apiClient = new ApiClient()

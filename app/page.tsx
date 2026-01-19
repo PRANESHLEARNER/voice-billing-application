@@ -14,6 +14,7 @@ import { EmployeeList } from "@/components/employees/employee-list"
 import { DiscountList } from "@/components/discounts/discount-list"
 import { SettingsManagement } from "@/components/settings/settings-management"
 import { ProfileView } from "@/components/profile/profile-view"
+import { ClientDataWizard } from "@/components/client-data/client-data-wizard"
 import { Button } from "@/components/ui/button"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { useFullscreen } from "@/hooks/use-fullscreen"
@@ -92,6 +93,14 @@ function SettingsTab() {
   )
 }
 
+function ClientDataTab() {
+  return (
+    <div className="p-6">
+      <ClientDataWizard />
+    </div>
+  )
+}
+
 function ProfileTab() {
   return (
     <div className="p-6">
@@ -116,6 +125,8 @@ export default function HomePage() {
     switch (activeTab) {
       case "billing":
         return <BillingTab isFullscreen={isFullscreen} />
+      case "client-data":
+        return <ClientDataTab />
       case "products":
         return <ProductsTab />
       case "inventory":
