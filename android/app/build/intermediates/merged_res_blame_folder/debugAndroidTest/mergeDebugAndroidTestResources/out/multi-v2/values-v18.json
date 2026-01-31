@@ -1,0 +1,28 @@
+{
+    "logs": [
+        {
+            "outputFile": "com.inventory.billing.test.app-mergeDebugAndroidTestResources-3:/values-v18/values-v18.xml",
+            "map": [
+                {
+                    "source": "C:\\Users\\prane\\.gradle\\caches\\8.11.1\\transforms\\0dfb94e8e9f7930d0d4cbce98a17f1aa\\transformed\\core-1.6.1\\res\\values-v18\\values.xml",
+                    "from": {
+                        "startLines": "4,12",
+                        "startColumns": "0,0",
+                        "startOffsets": "146,562",
+                        "endLines": "11,19",
+                        "endColumns": "8,8",
+                        "endOffsets": "561,975"
+                    },
+                    "to": {
+                        "startLines": "2,10",
+                        "startColumns": "4,4",
+                        "startOffsets": "55,475",
+                        "endLines": "9,17",
+                        "endColumns": "8,8",
+                        "endOffsets": "470,888"
+                    }
+                }
+            ]
+        }
+    ]
+}

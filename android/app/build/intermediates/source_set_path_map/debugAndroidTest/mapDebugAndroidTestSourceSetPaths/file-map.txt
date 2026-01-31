@@ -1,0 +1,6 @@
+com.inventory.billing.test.app-core-1.6.1-0 C:\Users\prane\.gradle\caches\8.11.1\transforms\0dfb94e8e9f7930d0d4cbce98a17f1aa\transformed\core-1.6.1\res
+com.inventory.billing.test.app-tracing-1.2.0-1 C:\Users\prane\.gradle\caches\8.11.1\transforms\640934fa0c2deb02232fb188bbe4540c\transformed\tracing-1.2.0\res
+com.inventory.billing.test.app-androidTest-2 E:\Inventory_Billing_Software\android\app\build\generated\res\resValues\androidTest\debug
+com.inventory.billing.test.app-mergeDebugAndroidTestResources-3 E:\Inventory_Billing_Software\android\app\build\intermediates\incremental\debugAndroidTest\mergeDebugAndroidTestResources\merged.dir
+com.inventory.billing.test.app-mergeDebugAndroidTestResources-4 E:\Inventory_Billing_Software\android\app\build\intermediates\incremental\debugAndroidTest\mergeDebugAndroidTestResources\stripped.dir
+com.inventory.billing.test.app-debugAndroidTest-5 E:\Inventory_Billing_Software\android\app\build\intermediates\merged_res\debugAndroidTest\mergeDebugAndroidTestResources
