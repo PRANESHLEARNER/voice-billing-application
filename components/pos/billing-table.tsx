@@ -47,20 +47,20 @@ export function BillingTable({ items, onUpdateItem, onRemoveItem }: BillingTable
 
 
   return (
-    <div className="border rounded-lg bg-card ">
+    <div className="border rounded-lg bg-card overflow-x-auto">
       <Table>
         <TableHeader>
-        <TableRow className="bg-primary text-primary-foreground hover:bg-primary">
-          <TableHead className="text-primary-foreground">Code</TableHead>
-          <TableHead className="text-primary-foreground">Item Name</TableHead>
-          <TableHead className="text-primary-foreground w-24">Qty</TableHead>
-          <TableHead className="text-primary-foreground w-32">Rate</TableHead>
-          <TableHead className="text-primary-foreground w-32">Discount</TableHead>
-          <TableHead className="text-primary-foreground w-24">Tax%</TableHead>
-          <TableHead className="text-primary-foreground w-32">Amount</TableHead>
-          <TableHead className="text-primary-foreground w-16">Action</TableHead>
-        </TableRow>
-      </TableHeader>
+          <TableRow className="bg-primary text-primary-foreground hover:bg-primary">
+            <TableHead className="text-primary-foreground">Code</TableHead>
+            <TableHead className="text-primary-foreground">Item Name</TableHead>
+            <TableHead className="text-primary-foreground w-24">Qty</TableHead>
+            <TableHead className="text-primary-foreground w-32">Rate</TableHead>
+            <TableHead className="text-primary-foreground w-32">Discount</TableHead>
+            <TableHead className="text-primary-foreground w-24">Tax%</TableHead>
+            <TableHead className="text-primary-foreground w-32">Amount</TableHead>
+            <TableHead className="text-primary-foreground w-16">Action</TableHead>
+          </TableRow>
+        </TableHeader>
 
         <TableBody>
           {items.length === 0 ? (
@@ -124,8 +124,8 @@ export function BillingTable({ items, onUpdateItem, onRemoveItem }: BillingTable
                   {item.discount ? (
                     <div className="space-y-1">
                       <Badge variant="secondary" className="text-xs">
-                        {item.discount.discountType === 'percentage' 
-                          ? `${item.discount.discountValue}%` 
+                        {item.discount.discountType === 'percentage'
+                          ? `${item.discount.discountValue}%`
                           : formatCurrency(item.discount.discountValue)}
                       </Badge>
                       <div className="text-xs text-muted-foreground">

@@ -177,7 +177,7 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
           </Button>
         </div>
         {/* Payment Method Selection */}
-        <div className="grid grid-cols-4 gap-1 mt-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-1 mt-2">
           <Button
             variant={paymentMethod === "cash" ? "default" : "outline"}
             size="sm"
