@@ -18,7 +18,6 @@ const employeeRoutes = require("./routes/employees");
 const leaveRoutes = require("./routes/leaves");
 const discountRoutes = require("./routes/discounts");
 const paymentRoutes = require("./routes/payments");
-const clientDataRoutes = require("./routes/clientData");
 
 const app = express();
 
@@ -41,7 +40,6 @@ app.use("/api/employees", employeeRoutes);
 app.use("/api/leaves", leaveRoutes);
 app.use("/api/discounts", discountRoutes);
 app.use("/api/payments", paymentRoutes);
-app.use("/api/client-data", clientDataRoutes);
 
 // Health check
 app.get("/api/health", (req, res) => {

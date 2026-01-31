@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ShoppingCart, RefreshCw, FileText, Wallet, Gift, Star, Loader2, Check, Sparkles } from "lucide-react"
+import { ShoppingCart, RefreshCw, FileText, Wallet, Gift, Star, Loader2, Check, Sparkles, Printer } from "lucide-react"
 import { ProductSearch } from "./product-search"
 import { BillingTable, type BillItem } from "./billing-table"
 import { BillingSummary } from "./billing-summary"
@@ -153,6 +153,7 @@ export function POSBilling() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const [lastBillId, setLastBillId] = useState<string | null>(null)
   const [heldBills, setHeldBills] = useState<Array<{
     id: string
     billItems: BillItem[]
@@ -177,7 +178,7 @@ export function POSBilling() {
   const calculateItemTotals = useCallback((item: Omit<BillItem, "amount" | "taxAmount" | "totalAmount">) => {
     const baseAmount = item.quantity * item.rate
     let discountAmount = 0
-    
+
     if (item.discount) {
       if (item.discount.discountType === 'percentage') {
         discountAmount = baseAmount * (item.discount.discountValue / 100)
@@ -186,7 +187,7 @@ export function POSBilling() {
         discountAmount = Math.min(item.discount.discountValue * item.quantity, baseAmount)
       }
     }
-    
+
     const discountedAmount = baseAmount - discountAmount
     const taxAmount = discountedAmount * (item.product.taxRate / 100)
     const totalAmount = discountedAmount + taxAmount
@@ -216,7 +217,7 @@ export function POSBilling() {
       console.log("🔍 Fetching discounts for product:", product._id, product.name, "variant:", variant.size)
       const discounts = await apiClient.getApplicableDiscounts(product._id)
       console.log("📦 Found discounts:", discounts)
-      
+
       if (discounts && discounts.length > 0) {
         // Sort discounts by discount amount (highest first)
         const sortedDiscounts = discounts.sort((a, b) => {
@@ -224,7 +225,7 @@ export function POSBilling() {
           const discountB = b.type === 'percentage' ? (variant.price * b.value / 100) : Math.min(b.value, variant.price)
           return discountB - discountA
         })
-        
+
         bestDiscount = sortedDiscounts[0]
         console.log("🏆 Best discount selected:", bestDiscount)
       } else {
@@ -286,7 +287,22 @@ export function POSBilling() {
     setBillItems((prev) => prev.filter((item) => item.id !== id))
   }
 
+  const handlePrintReceipt = async () => {
+    if (!lastBillId) return
+    setIsProcessing(true)
+    try {
+      const blob = await apiClient.generateBillPDF(lastBillId, language)
+      const url = window.URL.createObjectURL(blob)
+      window.open(url)
+    } catch (err) {
+      setError("Failed to generate receipt PDF")
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
   const clearBill = () => {
+    setLastBillId(null)
     setBillItems([])
     setCustomerInfo({ name: '', phone: '', email: '', address: '', gstNumber: '' })
     setError("")
@@ -295,7 +311,7 @@ export function POSBilling() {
 
 
   const grandTotal = billItems.reduce((total, item) => total + item.totalAmount, 0)
-  
+
   // Calculate loyalty discount for display (consistent with backend)
   const calculations = billItems.reduce(
     (acc, item) => {
@@ -307,11 +323,11 @@ export function POSBilling() {
     },
     { subtotal: 0, totalTax: 0, totalDiscount: 0 },
   )
-  
-  const loyaltyDiscountAmount = loyaltyStatus?.isEligible 
+
+  const loyaltyDiscountAmount = loyaltyStatus?.isEligible
     ? Math.round((calculations.subtotal + calculations.totalTax) * 0.02)
     : 0
-  
+
   // Calculate final total exactly like backend: (subtotal + totalTax) - loyaltyDiscount
   const backendGrandTotal = (calculations.subtotal + calculations.totalTax) - loyaltyDiscountAmount
   const roundOff = Math.round(backendGrandTotal) - backendGrandTotal
@@ -668,15 +684,15 @@ export function POSBilling() {
             product.variants && product.variants.length > 0
               ? product.variants
               : [
-                  {
-                    size: "Default",
-                    price: product.basePrice ?? 0,
-                    cost: product.baseCost ?? 0,
-                    stock: 0,
-                    sku: product.code,
-                    isActive: true,
-                  },
-                ]
+                {
+                  size: "Default",
+                  price: product.basePrice ?? 0,
+                  cost: product.baseCost ?? 0,
+                  stock: 0,
+                  sku: product.code,
+                  isActive: true,
+                },
+              ]
 
           const normalizedProductName = normalizeVoiceText(product.name)
           const hasCanonicalMatch = matchedCanonicals.some(
@@ -775,7 +791,7 @@ export function POSBilling() {
       // Prepare payment details for the bill
       let paymentDetails: any = {}
       let paymentBreakdown: any[] = []
-      
+
       if (paymentData.razorpayDetails) {
         paymentDetails = {
           razorpayPaymentId: paymentData.razorpayDetails.paymentId,
@@ -783,14 +799,14 @@ export function POSBilling() {
           razorpaySignature: paymentData.razorpayDetails.signature,
           paymentStatus: "completed"
         }
-        
+
         if (paymentData.razorpayDetails.method === "card") {
           paymentDetails.cardType = "Credit Card"
         } else if (paymentData.razorpayDetails.method === "upi") {
           paymentDetails.upiId = "customer@upi"
         }
       }
-      
+
       // Build payment breakdown
       if (paymentData.paymentMethod === "cash") {
         paymentBreakdown.push({
@@ -872,7 +888,7 @@ export function POSBilling() {
       }
 
       const bill = await apiClient.createBill(billData)
-      
+
       // Send bill via email if customer email is provided
       if (customerInfo.email && customerInfo.email.trim() !== '') {
         try {
@@ -882,6 +898,7 @@ export function POSBilling() {
             successMessage += ` 🎉 2% Loyalty discount applied!`
           }
           setSuccess(successMessage)
+          setLastBillId(bill._id)
         } catch (emailError) {
           console.error('Failed to send email:', emailError)
           // Still show success for bill creation, but note email failure
@@ -890,6 +907,7 @@ export function POSBilling() {
             successMessage += ` 🎉 2% Loyalty discount applied!`
           }
           setSuccess(successMessage)
+          setLastBillId(bill._id)
         }
       } else {
         let successMessage = `Bill ${bill.billNumber} created successfully!`
@@ -897,9 +915,11 @@ export function POSBilling() {
           successMessage += ` 🎉 2% Loyalty discount applied!`
         }
         setSuccess(successMessage)
+        setLastBillId(bill._id)
       }
-      
-      clearBill()
+
+      setBillItems([])
+      setCustomerInfo({ name: '', phone: '', email: '', address: '', gstNumber: '' })
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create bill")
     } finally {
@@ -921,331 +941,338 @@ export function POSBilling() {
           </CardHeader> */}
 
           <CardContent className="flex-1 p-0 flex flex-col lg:flex-row overflow-hidden">
-          {/* Left Side - Main Workspace */}
-          <div className="flex-1 flex flex-col p-6 space-y-6 min-w-0 overflow-hidden">
-            {/* Alerts */}
-            {error && (
-              <Alert variant="destructive" className="mb-4">
-                <AlertDescription>{error}</AlertDescription>
-              </Alert>
-            )}
+            {/* Left Side - Main Workspace */}
+            <div className="flex-1 flex flex-col p-6 space-y-6 min-w-0 overflow-hidden">
+              {/* Alerts */}
+              {error && (
+                <Alert variant="destructive" className="mb-4">
+                  <AlertDescription>{error}</AlertDescription>
+                </Alert>
+              )}
 
-            {success && (
-              <Alert className="border-green-200 bg-green-50 text-green-800 mb-4">
-                <AlertDescription>{success}</AlertDescription>
-              </Alert>
-            )}
+              {success && (
+                <Alert className="border-green-200 bg-green-50 text-green-800 mb-4">
+                  <AlertDescription className="flex items-center justify-between">
+                    <span>{success}</span>
+                    {lastBillId && (
+                      <Button size="sm" variant="outline" className="h-7 text-xs gap-1 ml-2 bg-white" onClick={handlePrintReceipt}>
+                        <Printer className="h-3 w-3" />
+                        Print Bill
+                      </Button>
+                    )}
+                  </AlertDescription>
+                </Alert>
+              )}
 
-            {/* Product Search with Action Buttons */}
-            <div className="flex-shrink-0 space-y-4">
-              <div className="flex gap-3 items-end">
-                <div className="flex-1">
-                  <ProductSearch onProductSelect={addProduct} />
+              {/* Product Search with Action Buttons */}
+              <div className="flex-shrink-0 space-y-4">
+                <div className="flex gap-3 items-end">
+                  <div className="flex-1">
+                    <ProductSearch onProductSelect={addProduct} />
+                  </div>
+                  <div className="flex gap-2">
+                    <Button variant="outline" onClick={clearBill} disabled={billItems.length === 0}>
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Clear All
+                    </Button>
+                    <Button variant="outline" onClick={holdBill} disabled={billItems.length === 0}>
+                      <FileText className="mr-2 h-4 w-4" />
+                      Hold Bill
+                    </Button>
+                  </div>
+                  <div className="flex-shrink-0">
+                    <LanguageSelector />
+                  </div>
                 </div>
-                <div className="flex gap-2">
-                  <Button variant="outline" onClick={clearBill} disabled={billItems.length === 0}>
-                    <RefreshCw className="mr-2 h-4 w-4" />
-                    Clear All
-                  </Button>
-                  <Button variant="outline" onClick={holdBill} disabled={billItems.length === 0}>
-                    <FileText className="mr-2 h-4 w-4" />
-                    Hold Bill
-                  </Button>
-                </div>
-                <div className="flex-shrink-0">
-                  <LanguageSelector />
-                </div>
+
+                {voiceEnabled && (
+                  <VoiceControls onTranscript={handleVoiceTranscript} />
+                )}
+                {voiceEnabled && lastVoiceCommand && (
+                  <div className="text-xs text-muted-foreground">
+                    Last voice command: <span className="font-medium text-foreground">{lastVoiceCommand}</span>
+                  </div>
+                )}
+                {voiceEnabled && (isVoiceProcessing || voiceSuggestions.length > 0) && (
+                  <div className="rounded-lg border bg-background/60 p-3 space-y-3">
+                    <div className="flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2 font-medium text-foreground">
+                        <Sparkles className="h-3.5 w-3.5 text-primary" />
+                        Voice suggestions
+                      </div>
+                      {isVoiceProcessing && (
+                        <Badge variant="outline" className="text-[10px] gap-1">
+                          <Loader2 className="h-3 w-3 animate-spin" />
+                          Processing
+                        </Badge>
+                      )}
+                    </div>
+
+                    {voiceSuggestions.map((suggestion) => (
+                      <div
+                        key={suggestion.id}
+                        className="border rounded-md p-2 text-xs flex flex-col gap-2 bg-muted/30"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div>
+                            <p className="font-medium text-sm text-foreground">{suggestion.product.name}</p>
+                            <p className="text-muted-foreground text-[11px]">
+                              {suggestion.variant.size} • Qty {suggestion.quantity}
+                            </p>
+                            <p className="text-[11px] text-muted-foreground">
+                              Confidence {(suggestion.score * 100).toFixed(0)}%
+                            </p>
+                          </div>
+                          <Badge variant="secondary" className="text-[10px] capitalize">
+                            {suggestion.action}
+                          </Badge>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => applyVoiceSuggestion(suggestion)}
+                            disabled={isVoiceProcessing}
+                            className="text-[11px] gap-1"
+                          >
+                            <Check className="h-3 w-3" />
+                            Apply
+                          </Button>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => dismissVoiceSuggestion(suggestion.id)}
+                            disabled={isVoiceProcessing}
+                            className="text-[11px]"
+                          >
+                            Dismiss
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+
+                    {!isVoiceProcessing && voiceSuggestions.length === 0 && (
+                      <p className="text-[11px] text-muted-foreground">Waiting for voice matches…</p>
+                    )}
+                  </div>
+                )}
+
+                {voiceEnabled && voiceMissingItems.length > 0 && (
+                  <div className="rounded-lg border border-dashed bg-muted/20 p-3 space-y-3">
+                    <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
+                      <span>Not in inventory yet</span>
+                      <Badge variant="secondary" className="text-[10px]">
+                        {voiceMissingItems.length} pending
+                      </Badge>
+                    </div>
+                    {voiceMissingItems.map((item) => (
+                      <div key={item.id} className="border rounded-md bg-background p-3 space-y-2 text-xs">
+                        <div className="font-semibold text-foreground">{toTitleCase(item.normalizedName)}</div>
+                        <div className="text-[11px] text-muted-foreground">“{item.transcript}”</div>
+                        <div className="flex flex-wrap gap-2">
+                          <Button size="sm" variant="default" onClick={() => openProductFormForMissingItem(item)}>
+                            Add to inventory
+                          </Button>
+                          <Button size="sm" variant="ghost" onClick={() => dismissMissingItem(item.id)}>
+                            Dismiss
+                          </Button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {voiceEnabled && (
-                <VoiceControls onTranscript={handleVoiceTranscript} />
-              )}
-              {voiceEnabled && lastVoiceCommand && (
-                <div className="text-xs text-muted-foreground">
-                  Last voice command: <span className="font-medium text-foreground">{lastVoiceCommand}</span>
-                </div>
-              )}
-              {voiceEnabled && (isVoiceProcessing || voiceSuggestions.length > 0) && (
-                <div className="rounded-lg border bg-background/60 p-3 space-y-3">
-                  <div className="flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 font-medium text-foreground">
-                      <Sparkles className="h-3.5 w-3.5 text-primary" />
-                      Voice suggestions
+              {/* Customer Information */}
+              <div className="flex-shrink-0">
+                <CustomerInfo
+                  customerInfo={{
+                    name: customerInfo.name || '',
+                    phone: customerInfo.phone || '',
+                    email: customerInfo.email,
+                    address: customerInfo.address,
+                    gstNumber: customerInfo.gstNumber
+                  }}
+                  onCustomerInfoChange={(newInfo) => {
+                    setCustomerInfo({
+                      name: newInfo.name || '',
+                      phone: newInfo.phone || '',
+                      email: newInfo.email,
+                      address: newInfo.address,
+                      gstNumber: newInfo.gstNumber
+                    })
+                  }}
+                />
+
+                {/* Loyalty Status Indicator */}
+                {isCheckingLoyalty && (
+                  <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+                    <div className="flex items-center gap-2">
+                      <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
+                      <span className="text-sm text-blue-700">Checking loyalty status...</span>
                     </div>
-                    {isVoiceProcessing && (
-                      <Badge variant="outline" className="text-[10px] gap-1">
-                        <Loader2 className="h-3 w-3 animate-spin" />
-                        Processing
-                      </Badge>
-                    )}
                   </div>
+                )}
 
-                  {voiceSuggestions.map((suggestion) => (
-                    <div
-                      key={suggestion.id}
-                      className="border rounded-md p-2 text-xs flex flex-col gap-2 bg-muted/30"
-                    >
-                      <div className="flex items-start justify-between gap-2">
-                        <div>
-                          <p className="font-medium text-sm text-foreground">{suggestion.product.name}</p>
-                          <p className="text-muted-foreground text-[11px]">
-                            {suggestion.variant.size} • Qty {suggestion.quantity}
-                          </p>
-                          <p className="text-[11px] text-muted-foreground">
-                            Confidence {(suggestion.score * 100).toFixed(0)}%
-                          </p>
-                        </div>
-                        <Badge variant="secondary" className="text-[10px] capitalize">
-                          {suggestion.action}
-                        </Badge>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button
-                          size="sm"
-                          onClick={() => applyVoiceSuggestion(suggestion)}
-                          disabled={isVoiceProcessing}
-                          className="text-[11px] gap-1"
-                        >
-                          <Check className="h-3 w-3" />
-                          Apply
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => dismissVoiceSuggestion(suggestion.id)}
-                          disabled={isVoiceProcessing}
-                          className="text-[11px]"
-                        >
-                          Dismiss
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {!isVoiceProcessing && voiceSuggestions.length === 0 && (
-                    <p className="text-[11px] text-muted-foreground">Waiting for voice matches…</p>
-                  )}
-                </div>
-              )}
-
-              {voiceEnabled && voiceMissingItems.length > 0 && (
-                <div className="rounded-lg border border-dashed bg-muted/20 p-3 space-y-3">
-                  <div className="flex items-center justify-between text-xs font-medium text-muted-foreground">
-                    <span>Not in inventory yet</span>
-                    <Badge variant="secondary" className="text-[10px]">
-                      {voiceMissingItems.length} pending
-                    </Badge>
-                  </div>
-                  {voiceMissingItems.map((item) => (
-                    <div key={item.id} className="border rounded-md bg-background p-3 space-y-2 text-xs">
-                      <div className="font-semibold text-foreground">{toTitleCase(item.normalizedName)}</div>
-                      <div className="text-[11px] text-muted-foreground">“{item.transcript}”</div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button size="sm" variant="default" onClick={() => openProductFormForMissingItem(item)}>
-                          Add to inventory
-                        </Button>
-                        <Button size="sm" variant="ghost" onClick={() => dismissMissingItem(item.id)}>
-                          Dismiss
-                        </Button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-
-            {/* Customer Information */}
-            <div className="flex-shrink-0">
-              <CustomerInfo 
-                customerInfo={{
-                  name: customerInfo.name || '',
-                  phone: customerInfo.phone || '',
-                  email: customerInfo.email,
-                  address: customerInfo.address,
-                  gstNumber: customerInfo.gstNumber
-                }} 
-                onCustomerInfoChange={(newInfo) => {
-                  setCustomerInfo({
-                    name: newInfo.name || '',
-                    phone: newInfo.phone || '',
-                    email: newInfo.email,
-                    address: newInfo.address,
-                    gstNumber: newInfo.gstNumber
-                  })
-                }} 
-              />
-              
-              {/* Loyalty Status Indicator */}
-              {isCheckingLoyalty && (
-                <div className="mt-2 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-                  <div className="flex items-center gap-2">
-                    <div className="animate-spin h-4 w-4 border-2 border-blue-600 border-t-transparent rounded-full"></div>
-                    <span className="text-sm text-blue-700">Checking loyalty status...</span>
-                  </div>
-                </div>
-              )}
-              
-              {loyaltyStatus && !isCheckingLoyalty && (
-                <div className={`mt-2 p-3 rounded-lg border ${
-                  loyaltyStatus.isEligible 
-                    ? 'bg-green-50 border-green-200' 
+                {loyaltyStatus && !isCheckingLoyalty && (
+                  <div className={`mt-2 p-3 rounded-lg border ${loyaltyStatus.isEligible
+                    ? 'bg-green-50 border-green-200'
                     : 'bg-amber-50 border-amber-200'
-                }`}>
-                  <div className="flex items-center gap-2">
-                    {loyaltyStatus.isEligible ? (
-                      <>
-                        <Gift className="h-4 w-4 text-green-600" />
-                        <div>
-                          <p className="text-sm font-medium text-green-800">🎉 Loyalty Discount Available!</p>
-                          <p className="text-xs text-green-700">2% discount will be applied on this purchase</p>
-                        </div>
-                      </>
-                    ) : (
-                      <>
-                        <Star className="h-4 w-4 text-amber-600" />
-                        <div>
-                          <p className="text-sm font-medium text-amber-800">Loyalty Status</p>
-                          <p className="text-xs text-amber-700">
-                            {loyaltyStatus.purchaseCount} purchases made • 
-                            {loyaltyStatus.nextPurchaseForDiscount > 0 
-                              ? `${loyaltyStatus.nextPurchaseForDiscount} more purchase${loyaltyStatus.nextPurchaseForDiscount > 1 ? 's' : ''} for 2% discount`
-                              : 'Next purchase eligible for discount!'
-                            }
-                          </p>
-                        </div>
-                      </>
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Items Billing Table - Scrollable */}
-            <div className="flex-1 min-h-0">
-              <Card className="h-full flex flex-col overflow-hidden">
-                <CardHeader className="flex-shrink-0 pb-3">
-                  <CardTitle className="text-lg">Items ({billItems.length})</CardTitle>
-                </CardHeader>
-                <CardContent className="flex-1 overflow-hidden p-0">
-                  <div className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-muted/20 hover:scrollbar-thumb-muted-foreground">
-                    <div className="p-4">
-                      <BillingTable items={billItems} onUpdateItem={updateItem} onRemoveItem={removeItem} />
+                    }`}>
+                    <div className="flex items-center gap-2">
+                      {loyaltyStatus.isEligible ? (
+                        <>
+                          <Gift className="h-4 w-4 text-green-600" />
+                          <div>
+                            <p className="text-sm font-medium text-green-800">🎉 Loyalty Discount Available!</p>
+                            <p className="text-xs text-green-700">2% discount will be applied on this purchase</p>
+                          </div>
+                        </>
+                      ) : (
+                        <>
+                          <Star className="h-4 w-4 text-amber-600" />
+                          <div>
+                            <p className="text-sm font-medium text-amber-800">Loyalty Status</p>
+                            <p className="text-xs text-amber-700">
+                              {loyaltyStatus.purchaseCount} purchases made •
+                              {loyaltyStatus.nextPurchaseForDiscount > 0
+                                ? `${loyaltyStatus.nextPurchaseForDiscount} more purchase${loyaltyStatus.nextPurchaseForDiscount > 1 ? 's' : ''} for 2% discount`
+                                : 'Next purchase eligible for discount!'
+                              }
+                            </p>
+                          </div>
+                        </>
+                      )}
                     </div>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
-          </div>
+                )}
+              </div>
 
-          {/* Right Side - Fixed Sidebar */}
-          <div className="w-full lg:w-80 flex-shrink-0 border-l bg-muted/50 flex flex-col">
-            {/* Fixed Top Section - Summary Card */}
-            <div className="flex-shrink-0 p-4 border-b">
-              <Card className="bg-gradient-to-br from-background to-muted/30 shadow-sm">
-                <CardHeader className="pb-1">
-                  <CardTitle className="text-lg flex items-center gap-2">
-                    <ShoppingCart className="h-5 w-5" />
-                    Bill Summary
-                    {billItems.length > 0 && (
-                      <span className="ml-auto text-sm bg-primary/10 text-primary px-2 py-1 rounded-full">
-                        {billItems.length} items
-                      </span>
-                    )}
-                  </CardTitle>
-                </CardHeader>
-                <CardContent className="pt-0">
-                  <BillingSummary items={billItems} loyaltyStatus={loyaltyStatus} />
-                </CardContent>
-              </Card>
+              {/* Items Billing Table - Scrollable */}
+              <div className="flex-1 min-h-0">
+                <Card className="h-full flex flex-col overflow-hidden">
+                  <CardHeader className="flex-shrink-0 pb-3">
+                    <CardTitle className="text-lg">Items ({billItems.length})</CardTitle>
+                  </CardHeader>
+                  <CardContent className="flex-1 overflow-hidden p-0">
+                    <div className="h-full overflow-y-auto scrollbar-thin scrollbar-thumb-muted scrollbar-track-muted/20 hover:scrollbar-thumb-muted-foreground">
+                      <div className="p-4">
+                        <BillingTable items={billItems} onUpdateItem={updateItem} onRemoveItem={removeItem} />
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              </div>
             </div>
-            
-            {/* Fixed Payment Section Card */}
-            {billItems.length > 0 && (
+
+            {/* Right Side - Fixed Sidebar */}
+            <div className="w-full lg:w-80 flex-shrink-0 border-l bg-muted/50 flex flex-col">
+              {/* Fixed Top Section - Summary Card */}
               <div className="flex-shrink-0 p-4 border-b">
                 <Card className="bg-gradient-to-br from-background to-muted/30 shadow-sm">
                   <CardHeader className="pb-1">
                     <CardTitle className="text-lg flex items-center gap-2">
-                      <Wallet className="h-5 w-5" />
-                      Payment
-                      <span className="ml-auto text-sm bg-primary/10 text-primary px-2 py-1 rounded-full">
-                        ₹{Math.round(finalGrandTotal).toLocaleString('en-IN')}
-                      </span>
+                      <ShoppingCart className="h-5 w-5" />
+                      Bill Summary
+                      {billItems.length > 0 && (
+                        <span className="ml-auto text-sm bg-primary/10 text-primary px-2 py-1 rounded-full">
+                          {billItems.length} items
+                        </span>
+                      )}
                     </CardTitle>
                   </CardHeader>
                   <CardContent className="pt-0">
-                    <PaymentSection grandTotal={Math.round(finalGrandTotal)} onPayment={handlePayment} isProcessing={isProcessing} />
+                    <BillingSummary items={billItems} loyaltyStatus={loyaltyStatus} />
                   </CardContent>
                 </Card>
               </div>
-            )}
-            
-            {/* Scrollable Content Area (if needed in future) */}
-            <div className="flex-1 overflow-y-auto p-4 space-y-4">
-              {/* Held Bills Section - Only show when no items and no payment section */}
-              {billItems.length === 0 && (
-                <Card className="bg-gradient-to-br from-background to-muted/30 shadow-sm">
-                  <CardHeader className="pb-2">
-                    <CardTitle className="text-lg flex items-center gap-2">
-                      <FileText className="h-5 w-5" />
-                      Held Bills
-                      <span className="ml-auto text-sm bg-primary/10 text-primary px-2 py-1 rounded-full">
-                        {heldBills.length} held
-                      </span>
-                    </CardTitle>
-                  </CardHeader>
-                  <CardContent className="pt-0 space-y-2">
-                    {heldBills.length > 0 ? (
-                      heldBills.map((heldBill) => (
-                        <div key={heldBill.id} className="p-3 border rounded-lg bg-background/50 hover:bg-background transition-colors">
-                          <div className="flex items-center justify-between mb-2">
-                            <div className="flex items-center gap-2">
-                              <span className="text-sm font-medium">{heldBill.billItems.length} items</span>
-                              <span className="text-sm text-muted-foreground">•</span>
-                              <span className="text-sm font-semibold text-primary">₹{heldBill.grandTotal.toLocaleString('en-IN')}</span>
-                            </div>
-                            <div className="flex items-center gap-1">
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => retrieveHeldBill(heldBill.id)}
-                                className="h-7 px-2 text-xs"
-                              >
-                                Retrieve
-                              </Button>
-                              <Button
-                                size="sm"
-                                variant="ghost"
-                                onClick={() => deleteHeldBill(heldBill.id)}
-                                className="h-7 px-2 text-xs text-destructive hover:text-destructive"
-                              >
-                                ×
-                              </Button>
-                            </div>
-                          </div>
-                          {heldBill.customerInfo.name && (
-                            <div className="text-xs text-muted-foreground">
-                              Customer: {heldBill.customerInfo.name}
-                              {heldBill.customerInfo.phone && ` • ${heldBill.customerInfo.phone}`}
-                            </div>
-                          )}
-                          <div className="text-xs text-muted-foreground mt-1">
-                            Held: {new Date(heldBill.heldAt).toLocaleString()}
-                          </div>
-                        </div>
-                      ))
-                    ) : (
-                      <div className="text-center py-8 text-muted-foreground">
-                        <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
-                        <p className="text-sm">No held bills yet</p>
-                        <p className="text-xs mt-1">Add items to a bill and click "Hold Bill" to save it here</p>
-                      </div>
-                    )}
-                  </CardContent>
-                </Card>
+
+              {/* Fixed Payment Section Card */}
+              {billItems.length > 0 && (
+                <div className="flex-shrink-0 p-4 border-b">
+                  <Card className="bg-gradient-to-br from-background to-muted/30 shadow-sm">
+                    <CardHeader className="pb-1">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <Wallet className="h-5 w-5" />
+                        Payment
+                        <span className="ml-auto text-sm bg-primary/10 text-primary px-2 py-1 rounded-full">
+                          ₹{Math.round(finalGrandTotal).toLocaleString('en-IN')}
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0">
+                      <PaymentSection grandTotal={Math.round(finalGrandTotal)} onPayment={handlePayment} isProcessing={isProcessing} />
+                    </CardContent>
+                  </Card>
+                </div>
               )}
+
+              {/* Scrollable Content Area (if needed in future) */}
+              <div className="flex-1 overflow-y-auto p-4 space-y-4">
+                {/* Held Bills Section - Only show when no items and no payment section */}
+                {billItems.length === 0 && (
+                  <Card className="bg-gradient-to-br from-background to-muted/30 shadow-sm">
+                    <CardHeader className="pb-2">
+                      <CardTitle className="text-lg flex items-center gap-2">
+                        <FileText className="h-5 w-5" />
+                        Held Bills
+                        <span className="ml-auto text-sm bg-primary/10 text-primary px-2 py-1 rounded-full">
+                          {heldBills.length} held
+                        </span>
+                      </CardTitle>
+                    </CardHeader>
+                    <CardContent className="pt-0 space-y-2">
+                      {heldBills.length > 0 ? (
+                        heldBills.map((heldBill) => (
+                          <div key={heldBill.id} className="p-3 border rounded-lg bg-background/50 hover:bg-background transition-colors">
+                            <div className="flex items-center justify-between mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-sm font-medium">{heldBill.billItems.length} items</span>
+                                <span className="text-sm text-muted-foreground">•</span>
+                                <span className="text-sm font-semibold text-primary">₹{heldBill.grandTotal.toLocaleString('en-IN')}</span>
+                              </div>
+                              <div className="flex items-center gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() => retrieveHeldBill(heldBill.id)}
+                                  className="h-7 px-2 text-xs"
+                                >
+                                  Retrieve
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  onClick={() => deleteHeldBill(heldBill.id)}
+                                  className="h-7 px-2 text-xs text-destructive hover:text-destructive"
+                                >
+                                  ×
+                                </Button>
+                              </div>
+                            </div>
+                            {heldBill.customerInfo.name && (
+                              <div className="text-xs text-muted-foreground">
+                                Customer: {heldBill.customerInfo.name}
+                                {heldBill.customerInfo.phone && ` • ${heldBill.customerInfo.phone}`}
+                              </div>
+                            )}
+                            <div className="text-xs text-muted-foreground mt-1">
+                              Held: {new Date(heldBill.heldAt).toLocaleString()}
+                            </div>
+                          </div>
+                        ))
+                      ) : (
+                        <div className="text-center py-8 text-muted-foreground">
+                          <FileText className="h-8 w-8 mx-auto mb-2 opacity-50" />
+                          <p className="text-sm">No held bills yet</p>
+                          <p className="text-xs mt-1">Add items to a bill and click "Hold Bill" to save it here</p>
+                        </div>
+                      )}
+                    </CardContent>
+                  </Card>
+                )}
+              </div>
             </div>
-          </div>
-            </CardContent>
+          </CardContent>
         </Card>
       </div>
 

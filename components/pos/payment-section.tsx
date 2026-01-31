@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Banknote, Loader2, CreditCard, Smartphone, Layers } from "lucide-react"
+import { Banknote, Loader2, CreditCard, Smartphone, Layers, QrCode } from "lucide-react"
 import { RazorpayPaymentDialog } from "@/components/pos/razorpay-payment-dialog"
+import { StaticQRDialog } from "@/components/pos/static-qr-dialog"
 
 interface PaymentSectionProps {
   grandTotal: number
@@ -35,6 +36,7 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
   const [razorpayPaymentMethod, setRazorpayPaymentMethod] = useState<"card" | "upi">("card")
   const [razorpayAmount, setRazorpayAmount] = useState(0)
   const [paymentCompleted, setPaymentCompleted] = useState(false)
+  const [isStaticQrOpen, setIsStaticQrOpen] = useState(false)
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -47,7 +49,7 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
   const cardAmountNum = Number.parseFloat(cardAmount) || 0
   const upiAmountNum = Number.parseFloat(upiAmount) || 0
   const changeDue = Math.max(0, cashAmount - grandTotal)
-  
+
   const totalPaid = cashAmount + cardAmountNum + upiAmountNum
   const remainingAmount = Math.max(0, grandTotal - totalPaid)
 
@@ -64,7 +66,7 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
     method: "card" | "upi"
   }) => {
     setIsRazorpayDialogOpen(false)
-    
+
     if (paymentMethod === "mixed") {
       // For mixed payments, update the respective amount
       if (paymentDetails.method === "card") {
@@ -106,7 +108,7 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
         paymentData.cashTendered = cashAmount
         paymentData.cardAmount = cardAmountNum
         paymentData.upiAmount = upiAmountNum
-        
+
         // Find the Razorpay payment details
         if (cardAmountNum > 0 && razorpayDetails?.method === "card") {
           paymentData.razorpayDetails = razorpayDetails
@@ -117,7 +119,7 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
 
       await onPayment(paymentData)
       setPaymentCompleted(true)
-      
+
       // Reset payment breakdown
       setCashTendered("")
       setCardAmount("")
@@ -162,7 +164,18 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
   return (
     <>
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-foreground">Payment</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Payment</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            onClick={() => setIsStaticQrOpen(true)}
+          >
+            <QrCode className="h-3 w-3" />
+            Show QR
+          </Button>
+        </div>
         {/* Payment Method Selection */}
         <div className="grid grid-cols-4 gap-1 mt-2">
           <Button
@@ -202,184 +215,184 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
             <span className="text-xs font-medium">Mixed</span>
           </Button>
         </div>
-          <div className="flex justify-between text-sm font-bold">
-            <span>Total Amount:</span>
-            <span className="text-primary">{formatCurrency(grandTotal)}</span>
+        <div className="flex justify-between text-sm font-bold">
+          <span>Total Amount:</span>
+          <span className="text-primary">{formatCurrency(grandTotal)}</span>
+        </div>
+
+        {/* Cash Payment Section */}
+        {(paymentMethod === "cash" || paymentMethod === "mixed") && (
+          <div className="space-y-1">
+            <Label htmlFor="cashTendered" className="text-xs">Cash Tendered</Label>
+            <Input
+              id="cashTendered"
+              type="number"
+              step="0.01"
+              min="0"
+              value={cashTendered}
+              onChange={(e) => setCashTendered(e.target.value)}
+              placeholder="0.00"
+              className="text-sm"
+            />
           </div>
+        )}
 
-          {/* Cash Payment Section */}
-          {(paymentMethod === "cash" || paymentMethod === "mixed") && (
+        {/* Card Payment Section */}
+        {paymentMethod === "mixed" && (
+          <Button
+            onClick={() => handleOpenRazorpayDialog("card", remainingAmount)}
+            disabled={isProcessing || remainingAmount <= 0}
+            className="w-full h-8 text-sm"
+            size="sm"
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              `Pay Card - ${formatCurrency(remainingAmount)}`
+            )}
+          </Button>
+        )}
+
+        {paymentMethod === "card" && (
+          <Button
+            onClick={() => handleOpenRazorpayDialog("card", grandTotal)}
+            disabled={isProcessing}
+            className="w-full h-8 text-sm"
+            size="sm"
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              `Pay ${formatCurrency(grandTotal)}`
+            )}
+          </Button>
+        )}
+
+        {/* UPI Payment Section */}
+        {paymentMethod === "mixed" && (
+          <Button
+            onClick={() => handleOpenRazorpayDialog("upi", remainingAmount)}
+            disabled={isProcessing || remainingAmount <= 0}
+            className="w-full h-8 text-sm"
+            size="sm"
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              `Pay UPI - ${formatCurrency(remainingAmount)}`
+            )}
+          </Button>
+        )}
+
+        {paymentMethod === "upi" && (
+          <Button
+            onClick={() => handleOpenRazorpayDialog("upi", grandTotal)}
+            disabled={isProcessing}
+            className="w-full h-8 text-sm"
+            size="sm"
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              `Pay ${formatCurrency(grandTotal)}`
+            )}
+          </Button>
+        )}
+
+        {/* Quick Cash Buttons - Only show for cash or mixed payments */}
+        {(paymentMethod === "cash" || paymentMethod === "mixed") && (
+          <div className="grid grid-cols-2 gap-1">
+            {quickCashAmounts.slice(0, 4).map((amount) => (
+              <Button
+                key={amount}
+                variant="outline"
+                size="sm"
+                onClick={() => setCashTendered(amount.toString())}
+                className="text-xs h-7"
+              >
+                {formatCurrency(amount)}
+              </Button>
+            ))}
+          </div>
+        )}
+
+        {/* Payment Breakdown */}
+        {(cashAmount > 0 || cardAmountNum > 0 || upiAmountNum > 0) && (
+          <>
+            <Separator />
             <div className="space-y-1">
-              <Label htmlFor="cashTendered" className="text-xs">Cash Tendered</Label>
-              <Input
-                id="cashTendered"
-                type="number"
-                step="0.01"
-                min="0"
-                value={cashTendered}
-                onChange={(e) => setCashTendered(e.target.value)}
-                placeholder="0.00"
-                className="text-sm"
-              />
-            </div>
-          )}
-
-          {/* Card Payment Section */}
-          {paymentMethod === "mixed" && (
-            <Button
-              onClick={() => handleOpenRazorpayDialog("card", remainingAmount)}
-              disabled={isProcessing || remainingAmount <= 0}
-              className="w-full h-8 text-sm"
-              size="sm"
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                `Pay Card - ${formatCurrency(remainingAmount)}`
-              )}
-            </Button>
-          )}
-          
-          {paymentMethod === "card" && (
-            <Button
-              onClick={() => handleOpenRazorpayDialog("card", grandTotal)}
-              disabled={isProcessing}
-              className="w-full h-8 text-sm"
-              size="sm"
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                `Pay ${formatCurrency(grandTotal)}`
-              )}
-            </Button>
-          )}
-
-          {/* UPI Payment Section */}
-          {paymentMethod === "mixed" && (
-            <Button
-              onClick={() => handleOpenRazorpayDialog("upi", remainingAmount)}
-              disabled={isProcessing || remainingAmount <= 0}
-              className="w-full h-8 text-sm"
-              size="sm"
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                `Pay UPI - ${formatCurrency(remainingAmount)}`
-              )}
-            </Button>
-          )}
-          
-          {paymentMethod === "upi" && (
-            <Button
-              onClick={() => handleOpenRazorpayDialog("upi", grandTotal)}
-              disabled={isProcessing}
-              className="w-full h-8 text-sm"
-              size="sm"
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                `Pay ${formatCurrency(grandTotal)}`
-              )}
-            </Button>
-          )}
-
-          {/* Quick Cash Buttons - Only show for cash or mixed payments */}
-          {(paymentMethod === "cash" || paymentMethod === "mixed") && (
-            <div className="grid grid-cols-2 gap-1">
-              {quickCashAmounts.slice(0, 4).map((amount) => (
-                <Button
-                  key={amount}
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setCashTendered(amount.toString())}
-                  className="text-xs h-7"
-                >
-                  {formatCurrency(amount)}
-                </Button>
-              ))}
-            </div>
-          )}
-
-          {/* Payment Breakdown */}
-          {(cashAmount > 0 || cardAmountNum > 0 || upiAmountNum > 0) && (
-            <>
-              <Separator />
-              <div className="space-y-1">
-                {cashAmount > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span>Cash Tendered:</span>
-                    <span className="font-medium">{formatCurrency(cashAmount)}</span>
-                  </div>
-                )}
-                {cardAmountNum > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span>Card Amount:</span>
-                    <span className="font-medium">{formatCurrency(cardAmountNum)}</span>
-                  </div>
-                )}
-                {upiAmountNum > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span>UPI Amount:</span>
-                    <span className="font-medium">{formatCurrency(upiAmountNum)}</span>
-                  </div>
-                )}
-                <div className="flex justify-between font-bold text-xs">
-                  <span>Total Paid:</span>
-                  <span className="text-primary">{formatCurrency(totalPaid)}</span>
+              {cashAmount > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span>Cash Tendered:</span>
+                  <span className="font-medium">{formatCurrency(cashAmount)}</span>
                 </div>
-                {paymentMethod === "cash" && cashAmount > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span>Change Due:</span>
-                    <span className="font-medium text-green-600">{formatCurrency(changeDue)}</span>
-                  </div>
-                )}
-                {paymentMethod === "mixed" && remainingAmount > 0 && (
-                  <div className="flex justify-between text-xs">
-                    <span>Remaining:</span>
-                    <span className="font-medium text-orange-600">{formatCurrency(remainingAmount)}</span>
-                  </div>
-                )}
-              </div>
-            </>
-          )}
-
-          {error && <div className="text-sm text-destructive">{error}</div>}
-
-          {/* Complete Sale Button - Only show for cash or mixed payments */}
-          {(paymentMethod === "cash" || paymentMethod === "mixed") && (
-            <Button
-              onClick={handlePayment}
-              disabled={isProcessing || 
-                (paymentMethod === "cash" && cashAmount < grandTotal) ||
-                (paymentMethod === "mixed" && totalPaid < grandTotal)}
-              className="w-full h-8 text-sm"
-              size="sm"
-            >
-              {isProcessing ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Processing...
-                </>
-              ) : (
-                `Complete Sale - ${formatCurrency(grandTotal)}`
               )}
-            </Button>
-          )}
+              {cardAmountNum > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span>Card Amount:</span>
+                  <span className="font-medium">{formatCurrency(cardAmountNum)}</span>
+                </div>
+              )}
+              {upiAmountNum > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span>UPI Amount:</span>
+                  <span className="font-medium">{formatCurrency(upiAmountNum)}</span>
+                </div>
+              )}
+              <div className="flex justify-between font-bold text-xs">
+                <span>Total Paid:</span>
+                <span className="text-primary">{formatCurrency(totalPaid)}</span>
+              </div>
+              {paymentMethod === "cash" && cashAmount > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span>Change Due:</span>
+                  <span className="font-medium text-green-600">{formatCurrency(changeDue)}</span>
+                </div>
+              )}
+              {paymentMethod === "mixed" && remainingAmount > 0 && (
+                <div className="flex justify-between text-xs">
+                  <span>Remaining:</span>
+                  <span className="font-medium text-orange-600">{formatCurrency(remainingAmount)}</span>
+                </div>
+              )}
+            </div>
+          </>
+        )}
+
+        {error && <div className="text-sm text-destructive">{error}</div>}
+
+        {/* Complete Sale Button - Only show for cash or mixed payments */}
+        {(paymentMethod === "cash" || paymentMethod === "mixed") && (
+          <Button
+            onClick={handlePayment}
+            disabled={isProcessing ||
+              (paymentMethod === "cash" && cashAmount < grandTotal) ||
+              (paymentMethod === "mixed" && totalPaid < grandTotal)}
+            className="w-full h-8 text-sm"
+            size="sm"
+          >
+            {isProcessing ? (
+              <>
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                Processing...
+              </>
+            ) : (
+              `Complete Sale - ${formatCurrency(grandTotal)}`
+            )}
+          </Button>
+        )}
       </div>
 
       {/* Razorpay Payment Dialog */}
@@ -390,6 +403,11 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
         paymentMethod={razorpayPaymentMethod}
         onSuccess={handleRazorpayPaymentSuccess}
         onError={handleRazorpayPaymentError}
+      />
+
+      <StaticQRDialog
+        isOpen={isStaticQrOpen}
+        onClose={() => setIsStaticQrOpen(false)}
       />
     </>
   )
