@@ -75,7 +75,7 @@ interface UseVoiceBillingResult {
 const LANGUAGE_TO_LOCALE: Record<Language, string> = {
   en: "en-IN",
   ta: "ta-IN",
-  bilingual: "en-IN",
+  bilingual: "ta-IN",
 }
 
 export function useVoiceBilling({
@@ -229,6 +229,17 @@ export function useVoiceBilling({
         setStatus("paused")
         return
       }
+
+      // Auto-restart if we are supposed to be listening
+      if (status === "listening" || status === "processing") {
+        try {
+          recognition.start()
+          return
+        } catch (err) {
+          console.warn("Auto-restart failed", err)
+        }
+      }
+
       setStatus("idle")
     }
 
