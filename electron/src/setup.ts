@@ -219,13 +219,14 @@ export class ElectronCapacitorApp {
 // Set a CSP up for our application based on the custom scheme
 export function setupContentSecurityPolicy(customScheme: string): void {
   session.defaultSession.webRequest.onHeadersReceived((details, callback) => {
+    const connectSrc = `${customScheme}://* http://localhost:5001 http://127.0.0.1:5001 http://10.0.2.2:5001 https://api.razorpay.com https://api.qrserver.com`;
     callback({
       responseHeaders: {
         ...details.responseHeaders,
         'Content-Security-Policy': [
           electronIsDev
-            ? `default-src ${customScheme}://* 'unsafe-inline' devtools://* 'unsafe-eval' data:`
-            : `default-src ${customScheme}://* 'unsafe-inline' data:`,
+            ? `default-src ${customScheme}://* 'unsafe-inline' devtools://* 'unsafe-eval' data:; connect-src ${connectSrc}; img-src ${customScheme}://* data: https://api.qrserver.com; frame-src https://checkout.razorpay.com; script-src ${customScheme}://* 'unsafe-inline' 'unsafe-eval' https://checkout.razorpay.com;`
+            : `default-src ${customScheme}://* 'unsafe-inline' data:; connect-src ${connectSrc}; img-src ${customScheme}://* data: https://api.qrserver.com; frame-src https://checkout.razorpay.com; script-src ${customScheme}://* 'unsafe-inline' https://checkout.razorpay.com;`,
         ],
       },
     });
