@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
-import { ShoppingCart, Package, Users, FileText, BarChart3, Settings, Clock, Menu, X, Tag, Boxes } from "lucide-react"
+import { ShoppingCart, Package, Users, FileText, BarChart3, Settings, Clock, Menu, X, Tag, Boxes, Upload } from "lucide-react"
 import { useAuth } from "@/hooks/use-auth"
 import { cn } from "@/lib/utils"
 
@@ -21,6 +21,7 @@ export function Navigation({ activeTab, onTabChange, isSidebarOpen, onSidebarTog
 
   const navigationItems = [
     { id: "billing", label: "Billing", icon: ShoppingCart, roles: ["admin", "cashier"] },
+    { id: "client-data", label: "Client Data", icon: Upload, roles: ["admin"] },
     { id: "products", label: "Products", icon: Package, roles: ["admin"] },
     { id: "inventory", label: "Inventory", icon: Boxes, roles: ["admin"] },
     { id: "bills", label: "Bill History", icon: FileText, roles: ["admin", "cashier"] },
