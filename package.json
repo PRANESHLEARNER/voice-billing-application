@@ -9,6 +9,8 @@
     "start": "next start"
   },
   "dependencies": {
+    "@capacitor-community/electron": "^5.0.1",
+    "@capacitor/android": "^8.0.2",
     "@capacitor/core": "^8.0.2",
     "@hookform/resolvers": "^3.10.0",
     "@radix-ui/react-accordion": "1.2.2",
