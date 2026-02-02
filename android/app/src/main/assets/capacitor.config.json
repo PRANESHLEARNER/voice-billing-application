@@ -1,5 +1,5 @@
 {
-	"appId": "com.inventory.billing",
-	"appName": "Inventory Billing",
+	"appId": "com.example.app",
+	"appName": "my-v0-project",
 	"webDir": "out"
 }

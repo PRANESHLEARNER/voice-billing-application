@@ -1,4 +1,4 @@
-  "use client"
+"use client"
 
 import { useState } from "react"
 import { ProtectedRoute } from "@/components/auth/protected-route"
@@ -14,7 +14,7 @@ import { EmployeeList } from "@/components/employees/employee-list"
 import { DiscountList } from "@/components/discounts/discount-list"
 import { SettingsManagement } from "@/components/settings/settings-management"
 import { ProfileView } from "@/components/profile/profile-view"
-import { ClientDataWizard } from "@/components/client-data/client-data-wizard"
+import ClientDataWizard from "@/components/client-data/client-data-wizard"
 import { Button } from "@/components/ui/button"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { useFullscreen } from "@/hooks/use-fullscreen"
@@ -112,13 +112,13 @@ function ProfileTab() {
 export default function HomePage() {
   const [activeTab, setActiveTab] = useState("billing")
   const [isSidebarOpen, setIsSidebarOpen] = useState(true)
-  
-  const { 
-    isFullscreen, 
-    showExitConfirmation, 
-    toggleFullscreen, 
-    exitFullscreen, 
-    setShowExitConfirmation 
+
+  const {
+    isFullscreen,
+    showExitConfirmation,
+    toggleFullscreen,
+    exitFullscreen,
+    setShowExitConfirmation
   } = useFullscreen()
 
   const renderTabContent = () => {
@@ -155,25 +155,25 @@ export default function HomePage() {
       <div className="min-h-screen bg-background">
         {/* Only show Header and Navigation when not in fullscreen */}
         {!isFullscreen && <Header onTabChange={setActiveTab} />}
-        
+
         <div className="flex">
           {/* Only show Navigation when not in fullscreen */}
           {!isFullscreen && (
-            <Navigation 
-              activeTab={activeTab} 
-              onTabChange={setActiveTab} 
-              isSidebarOpen={isSidebarOpen} 
-              onSidebarToggle={setIsSidebarOpen} 
+            <Navigation
+              activeTab={activeTab}
+              onTabChange={setActiveTab}
+              isSidebarOpen={isSidebarOpen}
+              onSidebarToggle={setIsSidebarOpen}
             />
           )}
-          
+
           <main className={`flex-1 ${isFullscreen ? 'w-screen h-screen' : ''}`}>
-            
+
             {renderTabContent()}
           </main>
         </div>
       </div>
-      
+
       {/* Fullscreen Exit Confirmation Dialog */}
       <AlertDialog open={showExitConfirmation} onOpenChange={setShowExitConfirmation}>
         <AlertDialogContent>

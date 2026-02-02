@@ -1,6 +1,6 @@
 "use client"
 
-import { ClientDataDashboard } from "@/components/client-data/client-data-dashboard"
+import ClientDataDashboard from "@/components/client-data/client-data-dashboard"
 
 export default function ClientDataPage() {
   return (
