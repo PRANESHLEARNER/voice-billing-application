@@ -10,6 +10,7 @@ import { BillingTable, type BillItem } from "./billing-table"
 import { BillingSummary } from "./billing-summary"
 import { PaymentSection } from "./payment-section"
 import { CustomerInfo } from "./customer-info"
+import { LanguageSelector } from "@/components/ui/language-selector"
 import { apiClient, type Product, type ProductVariant, type CustomerInfo as CustomerInfoType } from "@/lib/api"
 
 export function POSBilling() {
@@ -453,7 +454,7 @@ export function POSBilling() {
 
             {/* Product Search with Action Buttons */}
             <div className="flex-shrink-0">
-              <div className="flex gap-3">
+              <div className="flex gap-3 items-end">
                 <div className="flex-1">
                   <ProductSearch onProductSelect={addProduct} />
                 </div>
@@ -466,6 +467,9 @@ export function POSBilling() {
                     <FileText className="mr-2 h-4 w-4" />
                     Hold Bill
                   </Button>
+                </div>
+                <div className="flex-shrink-0">
+                  <LanguageSelector />
                 </div>
               </div>
             </div>
