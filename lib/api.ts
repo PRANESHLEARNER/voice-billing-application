@@ -2,7 +2,23 @@ import { authService } from "./auth"
 import type { Employee } from "@/types/employee"
 import type { Language } from "@/contexts/language-context"
 
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api"
+const getApiBaseUrl = () => {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL
+
+  if (typeof window !== "undefined") {
+    // Check if we are running in a Capacitor environment
+    const isCapacitor = (window as any).Capacitor?.platform !== undefined
+
+    if (isCapacitor) {
+      // Android emulator fallback. For real devices, the user should set NEXT_PUBLIC_API_URL to their machine's IP
+      return "http://10.0.2.2:5001/api"
+    }
+  }
+
+  return "http://localhost:5001/api"
+}
+
+const API_BASE_URL = getApiBaseUrl()
 
 class ApiClient {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -69,7 +85,7 @@ class ApiClient {
     const formData = new FormData()
     formData.append("file", file)
     formData.append("type", type)
-    
+
     return this.request<ClientDataFile>("/client-data/upload", {
       method: "POST",
       body: formData,
@@ -144,7 +160,7 @@ class ApiClient {
     const calculatedTotals = billData.items.reduce((acc, item) => {
       const baseAmount = item.rate * item.quantity
       let discountAmount = 0
-      
+
       // Use the pre-calculated discountAmount if available, otherwise calculate it
       if (item.discount) {
         if (item.discount.discountAmount !== undefined) {
@@ -160,11 +176,11 @@ class ApiClient {
           }
         }
       }
-      
+
       const discountedAmount = baseAmount - discountAmount
       const taxAmount = discountedAmount * (item.taxRate / 100)
       const totalAmount = discountedAmount + taxAmount
-      
+
       return {
         subtotal: acc.subtotal + discountedAmount,
         totalDiscount: acc.totalDiscount + discountAmount,
@@ -238,7 +254,7 @@ class ApiClient {
 
   // Send bill via WhatsApp
   async sendBillViaWhatsApp(id: string, phoneNumber: string) {
-    return this.request<{ 
+    return this.request<{
       success: boolean
       message: string
       whatsappUrl: string
@@ -264,13 +280,13 @@ class ApiClient {
   // Generate PDF for a bill
   async generateBillPDF(billId: string, language: string = 'en'): Promise<Blob> {
     console.log('🌐 API: Generating PDF for bill:', billId, 'with language:', language);
-    
+
     const searchParams = new URLSearchParams()
     searchParams.append('language', language)
-    
+
     const url = `${API_BASE_URL}/bills/${billId}/pdf?${searchParams.toString()}`
     console.log('🌐 API: Full URL:', url);
-    
+
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -607,7 +623,7 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify(data),
     })
-    
+
     // Extract the order data from the response
     return response.data
   }

@@ -1,3 +1,0 @@
-com.inventory.billing.test
-style WhiteBackgroundDialogTheme
-style WhiteBackgroundTheme
