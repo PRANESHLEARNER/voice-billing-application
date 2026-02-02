@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
-import { Banknote, Loader2, CreditCard, Smartphone, Layers } from "lucide-react"
+import { Banknote, Loader2, CreditCard, Smartphone, Layers, QrCode } from "lucide-react"
 import { RazorpayPaymentDialog } from "@/components/pos/razorpay-payment-dialog"
 import { StaticQrDialog } from "@/components/pos/static-qr-dialog"
 
@@ -37,6 +37,7 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
   const [razorpayPaymentMethod, setRazorpayPaymentMethod] = useState<"card" | "upi">("card")
   const [razorpayAmount, setRazorpayAmount] = useState(0)
   const [paymentCompleted, setPaymentCompleted] = useState(false)
+  const [isStaticQrOpen, setIsStaticQrOpen] = useState(false)
 
   const formatCurrency = (amount: number) => {
     return new Intl.NumberFormat("en-IN", {
@@ -169,9 +170,20 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
   return (
     <>
       <div className="space-y-3">
-        <h3 className="text-sm font-semibold text-foreground">Payment</h3>
+        <div className="flex items-center justify-between">
+          <h3 className="text-sm font-semibold text-foreground">Payment</h3>
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs gap-1"
+            onClick={() => setIsStaticQrOpen(true)}
+          >
+            <QrCode className="h-3 w-3" />
+            Show QR
+          </Button>
+        </div>
         {/* Payment Method Selection */}
-        <div className="grid grid-cols-4 gap-1 mt-2">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-1 mt-2">
           <Button
             variant={paymentMethod === "cash" ? "default" : "outline"}
             size="sm"

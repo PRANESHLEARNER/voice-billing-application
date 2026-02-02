@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
-import { ShoppingCart, RefreshCw, FileText, Wallet, Gift, Star, Loader2, Check, Sparkles } from "lucide-react"
+import { ShoppingCart, RefreshCw, FileText, Wallet, Gift, Star, Loader2, Check, Sparkles, Printer } from "lucide-react"
 import { ProductSearch } from "./product-search"
 import { BillingTable, type BillItem } from "./billing-table"
 import { BillingSummary } from "./billing-summary"
@@ -167,6 +167,7 @@ export function POSBilling() {
   const [isProcessing, setIsProcessing] = useState(false)
   const [error, setError] = useState("")
   const [success, setSuccess] = useState("")
+  const [lastBillId, setLastBillId] = useState<string | null>(null)
   const [heldBills, setHeldBills] = useState<Array<{
     id: string
     billItems: BillItem[]
@@ -314,7 +315,22 @@ export function POSBilling() {
     setBillItems((prev) => prev.filter((item) => item.id !== id))
   }
 
+  const handlePrintReceipt = async () => {
+    if (!lastBillId) return
+    setIsProcessing(true)
+    try {
+      const blob = await apiClient.generateBillPDF(lastBillId, language)
+      const url = window.URL.createObjectURL(blob)
+      window.open(url)
+    } catch (err) {
+      setError("Failed to generate receipt PDF")
+    } finally {
+      setIsProcessing(false)
+    }
+  }
+
   const clearBill = () => {
+    setLastBillId(null)
     setBillItems([])
     setCustomerInfo({ name: '', phone: '', email: '', address: '', gstNumber: '' })
     setError("")
@@ -929,6 +945,7 @@ export function POSBilling() {
             successMessage += ` 🎉 2% Loyalty discount applied!`
           }
           setSuccess(successMessage)
+          setLastBillId(bill._id)
         } catch (emailError) {
           console.error('Failed to send email:', emailError)
           // Still show success for bill creation, but note email failure
@@ -937,6 +954,7 @@ export function POSBilling() {
             successMessage += ` 🎉 2% Loyalty discount applied!`
           }
           setSuccess(successMessage)
+          setLastBillId(bill._id)
         }
       } else {
         let successMessage = `Bill ${bill.billNumber} created successfully!`
@@ -944,6 +962,7 @@ export function POSBilling() {
           successMessage += ` 🎉 2% Loyalty discount applied!`
         }
         setSuccess(successMessage)
+        setLastBillId(bill._id)
       }
 
       clearBill()
