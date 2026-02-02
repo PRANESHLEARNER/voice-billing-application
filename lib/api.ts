@@ -2,67 +2,23 @@ import { authService } from "./auth"
 import type { Employee } from "@/types/employee"
 import type { Language } from "@/contexts/language-context"
 
-export type ClientDataStatus = "missing" | "draft" | "pending_review" | "complete" | "reopened"
+const getApiBaseUrl = () => {
+  if (process.env.NEXT_PUBLIC_API_URL) return process.env.NEXT_PUBLIC_API_URL
 
-export interface ClientDataFileMeta {
-  totalItems?: number
-  notes?: string
+  if (typeof window !== "undefined") {
+    // Check if we are running in a Capacitor environment
+    const isCapacitor = (window as any).Capacitor?.platform !== undefined
+
+    if (isCapacitor) {
+      // Android emulator fallback. For real devices, the user should set NEXT_PUBLIC_API_URL to their machine's IP
+      return "http://10.0.2.2:5001/api"
+    }
+  }
+
+  return "http://localhost:5001/api"
 }
 
-export interface ClientDataFile {
-  type: "SKU_LIST" | "TAX_PROOF" | "BILL_SAMPLE"
-  originalName?: string
-  filename?: string
-  path?: string
-  mimeType?: string
-  size?: number
-  uploadedAt?: string
-  meta?: ClientDataFileMeta
-}
-
-export interface ClientData {
-  _id: string
-  user: string
-  status: ClientDataStatus
-  businessProfile?: {
-    storeName?: string
-    storeAddress?: string
-    taxId?: string
-    contactName?: string
-    contactPhone?: string
-    contactEmail?: string
-  }
-  taxConfig?: {
-    currency?: string
-    regime?: string
-    roundingPreference?: string
-    notes?: string
-  }
-  itemMasterSummary?: {
-    totalItems?: number
-    lastUploadedAt?: string
-    templateVersion?: string
-  }
-  receiptSample?: {
-    provided?: boolean
-    useSystemDefault?: boolean
-    notes?: string
-  }
-  files: ClientDataFile[]
-  audit?: {
-    submittedBy?: string
-    submittedAt?: string
-    approvedBy?: string
-    approvedAt?: string
-    lastUpdatedBy?: string
-    lastUpdatedAt?: string
-    notes?: string
-  }
-  createdAt?: string
-  updatedAt?: string
-}
-
-const API_BASE_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:5001/api"
+const API_BASE_URL = getApiBaseUrl()
 
 class ApiClient {
   private async request<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -105,6 +61,49 @@ class ApiClient {
     const data = await response.json()
     console.log("✅ API Response:", data)
     return data
+  }
+
+  // -------------------
+  // Client Data API methods
+  // -------------------
+  async getClientData(): Promise<ClientData> {
+    return this.request<ClientData>("/client-data/me")
+  }
+
+  async updateClientData(data: Partial<ClientData>): Promise<ClientData> {
+    return this.request<ClientData>("/client-data/me", {
+      method: "PATCH",
+      body: JSON.stringify(data)
+    })
+  }
+
+  async submitClientData(): Promise<{ message: string }> {
+    return this.request<{ message: string }>("/client-data/me/submit", {
+      method: "POST"
+    })
+  }
+
+  async uploadClientDataFile(file: File, type: "SKU_LIST" | "TAX_PROOF" | "BILL_SAMPLE"): Promise<ClientDataFile> {
+    const formData = new FormData()
+    formData.append("file", file)
+    formData.append("type", type)
+
+    return this.request<ClientDataFile>("/client-data/upload", {
+      method: "POST",
+      body: formData,
+      headers: {} // Let browser set Content-Type for multipart/form-data
+    })
+  }
+
+  async listClientData(): Promise<ClientData[]> {
+    return this.request<ClientData[]>("/client-data")
+  }
+
+  async updateClientDataStatus(id: string, status: string): Promise<{ message: string }> {
+    return this.request<{ message: string }>(`/client-data/${id}/status`, {
+      method: "PATCH",
+      body: JSON.stringify({ status })
+    })
   }
 
   // -------------------
@@ -163,7 +162,7 @@ class ApiClient {
     const calculatedTotals = billData.items.reduce((acc, item) => {
       const baseAmount = item.rate * item.quantity
       let discountAmount = 0
-      
+
       // Use the pre-calculated discountAmount if available, otherwise calculate it
       if (item.discount) {
         if (item.discount.discountAmount !== undefined) {
@@ -179,11 +178,11 @@ class ApiClient {
           }
         }
       }
-      
+
       const discountedAmount = baseAmount - discountAmount
       const taxAmount = discountedAmount * (item.taxRate / 100)
       const totalAmount = discountedAmount + taxAmount
-      
+
       return {
         subtotal: acc.subtotal + discountedAmount,
         totalDiscount: acc.totalDiscount + discountAmount,
@@ -257,7 +256,7 @@ class ApiClient {
 
   // Send bill via WhatsApp
   async sendBillViaWhatsApp(id: string, phoneNumber: string) {
-    return this.request<{ 
+    return this.request<{
       success: boolean
       message: string
       whatsappUrl: string
@@ -283,13 +282,13 @@ class ApiClient {
   // Generate PDF for a bill
   async generateBillPDF(billId: string, language: string = 'en'): Promise<Blob> {
     console.log('🌐 API: Generating PDF for bill:', billId, 'with language:', language);
-    
+
     const searchParams = new URLSearchParams()
     searchParams.append('language', language)
-    
+
     const url = `${API_BASE_URL}/bills/${billId}/pdf?${searchParams.toString()}`
     console.log('🌐 API: Full URL:', url);
-    
+
     const response = await fetch(url, {
       method: 'GET',
       headers: {
@@ -666,7 +665,7 @@ class ApiClient {
       method: "POST",
       body: JSON.stringify(data),
     })
-    
+
     // Extract the order data from the response
     return response.data
   }
@@ -1049,6 +1048,54 @@ export interface DiscountStats {
     _id: string
     count: number
   }>
+}
+
+export interface ClientData {
+  _id?: string
+  businessProfile?: {
+    storeName?: string
+    contactName?: string
+    contactPhone?: string
+    contactEmail?: string
+    address?: string
+    completed?: boolean
+  }
+  taxConfig?: {
+    regime?: string
+    gstin?: string
+    roundingPreference?: string
+    completed?: boolean
+  }
+  itemMaster?: {
+    totalSkuCount?: number
+    categories?: string[]
+    completed?: boolean
+  }
+  receiptSample?: {
+    useSystemDefault?: boolean
+    notes?: string
+    completed?: boolean
+  }
+  status?: "not_started" | "in_progress" | "pending_review" | "complete"
+  files?: ClientDataFile[]
+  createdAt?: string
+  updatedAt?: string
+}
+
+export interface ClientDataFile {
+  _id: string
+  type: "SKU_LIST" | "TAX_PROOF" | "BILL_SAMPLE"
+  originalName: string
+  fileName: string
+  size: number
+  mimeType: string
+  uploadedAt: string
+}
+
+export interface ClientDataStatus {
+  status: "not_started" | "in_progress" | "pending_review" | "complete"
+  canSubmit: boolean
+  missingSections: string[]
 }
 
 export const apiClient = new ApiClient()

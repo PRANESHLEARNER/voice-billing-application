@@ -1,115 +1,151 @@
-"use client"
+import { useState, useEffect } from "react"
+import { apiClient, ClientData } from "@/lib/api"
 
-import { useCallback, useEffect, useMemo, useState } from "react"
-import { apiClient, type ClientData, type ClientDataFile, type ClientDataStatus } from "@/lib/api"
-
-interface UploadOptions {
-  file: File
-  type: ClientDataFile["type"]
-  totalItems?: number
-  notes?: string
+interface UseClientDataReturn {
+  data: ClientData | null
+  isLoading: boolean
+  error: string | null
+  isSaving: boolean
+  isUploading: boolean
+  isSubmitting: boolean
+  saveDraft: (data: Partial<ClientData>) => Promise<void>
+  uploadFile: (file: File, type: "SKU_LIST" | "TAX_PROOF" | "BILL_SAMPLE") => Promise<void>
+  submit: () => Promise<void>
+  refresh: () => Promise<void>
 }
 
-interface SubmitOptions {
-  autoApprove?: boolean
-}
-
-export function useClientData() {
+export function useClientData(): UseClientDataReturn {
   const [data, setData] = useState<ClientData | null>(null)
-  const [isLoading, setIsLoading] = useState(true)
+  const [isLoading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isUploading, setIsUploading] = useState(false)
   const [isSubmitting, setIsSubmitting] = useState(false)
 
-  const load = useCallback(async () => {
-    setIsLoading(true)
-    setError(null)
+  const loadData = async () => {
     try {
-      const response = await apiClient.getClientData()
-      setData(response)
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load client data")
+      setLoading(true)
+      const clientData = await apiClient.getClientData()
+      setData(clientData)
+      setError(null)
+    } catch (err: any) {
+      setError(err.message || "Failed to load client data")
     } finally {
-      setIsLoading(false)
+      setLoading(false)
     }
-  }, [])
+  }
 
-  useEffect(() => {
-    void load()
-  }, [load])
-
-  const saveDraft = useCallback(async (payload: Partial<ClientData>) => {
-    setIsSaving(true)
-    setError(null)
+  const saveDraft = async (draftData: Partial<ClientData>) => {
     try {
-      const response = await apiClient.updateClientData(payload)
-      setData(response)
-      return response
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save client data")
-      throw err
+      setIsSaving(true)
+      const updatedData = await apiClient.updateClientData(draftData)
+      setData(updatedData)
+      setError(null)
+    } catch (err: any) {
+      setError(err.message || "Failed to save draft")
     } finally {
       setIsSaving(false)
     }
-  }, [])
+  }
 
-  const uploadFile = useCallback(async ({ file, type, totalItems, notes }: UploadOptions) => {
-    setIsUploading(true)
-    setError(null)
+  const uploadFile = async (file: File, type: "SKU_LIST" | "TAX_PROOF" | "BILL_SAMPLE") => {
     try {
-      const formData = new FormData()
-      formData.append("file", file)
-      formData.append("type", type)
-      if (totalItems !== undefined) {
-        formData.append("totalItems", totalItems.toString())
+      setIsUploading(true)
+      const uploadedFile = await apiClient.uploadClientDataFile(file, type)
+      
+      // Update local data with new file
+      if (data) {
+        const updatedFiles = [...(data.files || []), uploadedFile]
+        setData({
+          ...data,
+          files: updatedFiles
+        })
+        
+        // Update item master count if SKU list
+        if (type === "SKU_LIST") {
+          setData({
+            ...data,
+            files: updatedFiles,
+            itemMaster: {
+              ...data.itemMaster,
+              totalSkuCount: (data.itemMaster?.totalSkuCount || 0) + 1,
+              completed: true
+            }
+          })
+        }
+        
+        // Update receipt sample completion
+        if (type === "BILL_SAMPLE") {
+          setData({
+            ...data,
+            files: updatedFiles,
+            receiptSample: {
+              ...data.receiptSample,
+              completed: true
+            }
+          })
+        }
+        
+        // Update tax config completion
+        if (type === "TAX_PROOF") {
+          setData({
+            ...data,
+            files: updatedFiles,
+            taxConfig: {
+              ...data.taxConfig,
+              completed: true
+            }
+          })
+        }
       }
-      if (notes) {
-        formData.append("notes", notes)
-      }
-      const response = await apiClient.uploadClientDataFile(formData)
-      setData(response)
-      return response
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to upload file")
-      throw err
+      
+      setError(null)
+    } catch (err: any) {
+      setError(err.message || "Failed to upload file")
     } finally {
       setIsUploading(false)
     }
-  }, [])
+  }
 
-  const submit = useCallback(async (options?: SubmitOptions) => {
-    setIsSubmitting(true)
-    setError(null)
+  const submit = async () => {
     try {
-      const response = await apiClient.submitClientData(options)
-      setData(response)
-      return response
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to submit client data")
-      throw err
+      setIsSubmitting(true)
+      await apiClient.submitClientData()
+      
+      // Update status to pending_review
+      if (data) {
+        setData({
+          ...data,
+          status: "pending_review"
+        })
+      }
+      
+      setError(null)
+    } catch (err: any) {
+      setError(err.message || "Failed to submit data")
     } finally {
       setIsSubmitting(false)
     }
+  }
+
+  const refresh = async () => {
+    await loadData()
+  }
+
+  useEffect(() => {
+    loadData()
   }, [])
-
-  const refresh = useCallback(async () => {
-    await load()
-  }, [load])
-
-  const status: ClientDataStatus = useMemo(() => data?.status ?? "missing", [data])
 
   return {
     data,
-    status,
     isLoading,
     error,
     isSaving,
     isUploading,
     isSubmitting,
-    refresh,
     saveDraft,
     uploadFile,
     submit,
+    refresh,
   }
 }

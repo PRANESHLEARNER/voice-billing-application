@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label"
 import { Separator } from "@/components/ui/separator"
 import { Banknote, Loader2, CreditCard, Smartphone, Layers, QrCode } from "lucide-react"
 import { RazorpayPaymentDialog } from "@/components/pos/razorpay-payment-dialog"
-import { StaticQRDialog } from "@/components/pos/static-qr-dialog"
+import { StaticQrDialog } from "@/components/pos/static-qr-dialog"
 
 interface PaymentSectionProps {
   grandTotal: number
@@ -33,6 +33,7 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
   const [cardAmount, setCardAmount] = useState("")
   const [upiAmount, setUpiAmount] = useState("")
   const [isRazorpayDialogOpen, setIsRazorpayDialogOpen] = useState(false)
+  const [isStaticQrDialogOpen, setIsStaticQrDialogOpen] = useState(false)
   const [razorpayPaymentMethod, setRazorpayPaymentMethod] = useState<"card" | "upi">("card")
   const [razorpayAmount, setRazorpayAmount] = useState(0)
   const [paymentCompleted, setPaymentCompleted] = useState(false)
@@ -83,6 +84,11 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
   const handleRazorpayPaymentError = (error: string) => {
     setIsRazorpayDialogOpen(false)
     setError(error)
+  }
+
+  const handleStaticQrSuccess = () => {
+    setIsStaticQrDialogOpen(false)
+    handleAutomaticBillCompletion()
   }
 
   const handleAutomaticBillCompletion = async (razorpayDetails?: {
@@ -215,6 +221,32 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
             <span className="text-xs font-medium">Mixed</span>
           </Button>
         </div>
+
+        {/* UPI Type Selection (Only when UPI or Mixed is selected) */}
+        {(paymentMethod === "upi" || paymentMethod === "mixed") && (
+          <div className="flex gap-2 mt-2">
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 h-8 text-[10px] gap-1"
+              onClick={() => handleOpenRazorpayDialog("upi", paymentMethod === "upi" ? grandTotal : remainingAmount)}
+              disabled={isProcessing || (paymentMethod === "mixed" && remainingAmount <= 0)}
+            >
+              <Smartphone className="h-3 w-3" />
+              Dynamic QR
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
+              className="flex-1 h-8 text-[10px] gap-1"
+              onClick={() => setIsStaticQrDialogOpen(true)}
+              disabled={isProcessing || (paymentMethod === "mixed" && remainingAmount <= 0)}
+            >
+              <Smartphone className="h-3 w-3" />
+              Static QR
+            </Button>
+          </div>
+        )}
         <div className="flex justify-between text-sm font-bold">
           <span>Total Amount:</span>
           <span className="text-primary">{formatCurrency(grandTotal)}</span>
@@ -405,9 +437,12 @@ export function PaymentSection({ grandTotal, onPayment, isProcessing }: PaymentS
         onError={handleRazorpayPaymentError}
       />
 
-      <StaticQRDialog
-        isOpen={isStaticQrOpen}
-        onClose={() => setIsStaticQrOpen(false)}
+      {/* Static QR Dialog */}
+      <StaticQrDialog
+        isOpen={isStaticQrDialogOpen}
+        onClose={() => setIsStaticQrDialogOpen(false)}
+        amount={paymentMethod === "upi" ? grandTotal : remainingAmount}
+        onPaymentComplete={handleStaticQrSuccess}
       />
     </>
   )
